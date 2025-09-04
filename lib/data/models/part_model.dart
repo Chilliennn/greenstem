@@ -18,8 +18,7 @@ class PartModel {
       partId: json['part_id'],
       name: json['name'],
       description: json['description'],
-      category: json['cateogory'],
-      // Note: typo in your schema
+      category: json['category'],
       createdAt: DateTime.parse(json['created_at']),
     );
   }
@@ -29,7 +28,7 @@ class PartModel {
       'part_id': partId,
       'name': name,
       'description': description,
-      'cateogory': category, // Note: typo in your schema
+      'category': category,
       'created_at': createdAt.toIso8601String(),
     };
   }

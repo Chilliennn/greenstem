@@ -1,15 +1,11 @@
-import 'package:greenstem/data/models/delivery_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/delivery_model.dart';
 
 abstract class DeliveryDataSource {
   Future<List<DeliveryModel>> getAllDeliveries();
-
   Future<DeliveryModel?> getDeliveryById(String id);
-
   Future<DeliveryModel> createDelivery(DeliveryModel delivery);
-
   Future<DeliveryModel> updateDelivery(DeliveryModel delivery);
-
   Future<void> deleteDelivery(String id);
 }
 
@@ -23,7 +19,7 @@ class SupabaseDeliveryDataSource implements DeliveryDataSource {
           .from('delivery')
           .select()
           .order('created_at', ascending: false);
-
+      
       return (response as List)
           .map((json) => DeliveryModel.fromJson(json))
           .toList();
@@ -40,7 +36,7 @@ class SupabaseDeliveryDataSource implements DeliveryDataSource {
           .select()
           .eq('delivery_id', id)
           .maybeSingle();
-
+      
       return response != null ? DeliveryModel.fromJson(response) : null;
     } catch (e) {
       throw Exception('Failed to fetch delivery: $e');
@@ -55,7 +51,7 @@ class SupabaseDeliveryDataSource implements DeliveryDataSource {
           .insert(delivery.toJson())
           .select()
           .single();
-
+      
       return DeliveryModel.fromJson(response);
     } catch (e) {
       throw Exception('Failed to create delivery: $e');
@@ -71,7 +67,7 @@ class SupabaseDeliveryDataSource implements DeliveryDataSource {
           .eq('delivery_id', delivery.deliveryId)
           .select()
           .single();
-
+      
       return DeliveryModel.fromJson(response);
     } catch (e) {
       throw Exception('Failed to update delivery: $e');
@@ -81,7 +77,10 @@ class SupabaseDeliveryDataSource implements DeliveryDataSource {
   @override
   Future<void> deleteDelivery(String id) async {
     try {
-      await _client.from('delivery').delete().eq('delivery_id', id);
+      await _client
+          .from('delivery')
+          .delete()
+          .eq('delivery_id', id);
     } catch (e) {
       throw Exception('Failed to delete delivery: $e');
     }

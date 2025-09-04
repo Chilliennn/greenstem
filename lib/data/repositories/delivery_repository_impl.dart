@@ -1,7 +1,7 @@
-import 'package:greenstem/data/datasources/delivery_datasource.dart';
-import 'package:greenstem/data/models/delivery_model.dart';
-import 'package:greenstem/domain/entities/delivery.dart';
-import 'package:greenstem/domain/repositories/delivery_repository.dart';
+import '../../domain/entities/delivery.dart';
+import '../../domain/repositories/delivery_repository.dart';
+import '../datasources/delivery_datasource.dart';
+import '../models/delivery_model.dart';
 
 class DeliveryRepositoryImpl implements DeliveryRepository {
   final DeliveryDataSource _dataSource;
