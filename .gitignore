@@ -17,6 +17,7 @@ migrate_working_dir/
 *.ipr
 *.iws
 .idea/
+.idea/*
 
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
@@ -43,3 +44,156 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Android specific
+/android/.gradle/
+/android/app/.cxx/
+/android/build/
+/android/gradle-wrapper.jar
+/android/local.properties
+/android/GeneratedPluginRegistrant.java
+/android/.kotlin/
+android/app/build/
+android/build/
+android/.gradle/
+android/.kotlin/
+
+# Remember to never publicly share your keystore.
+# See https://flutter.dev/to/reference-keystore
+key.properties
+**/*.keystore
+**/*.jks
+
+# iOS specific
+**/dgph
+*.mode1v3
+*.mode2v3
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+**/*sync/
+.sconsign.dblite
+.tags*
+**/.vagrant/
+**/DerivedData/
+Icon?
+**/Pods/
+**/.symlinks/
+profile
+xcuserdata
+**/.generated/
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/Flutter/flutter_assets/
+ios/Flutter/flutter_export_environment.sh
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+
+# Exceptions to above rules for iOS
+!default.mode1v3
+!default.mode2v3
+!default.pbxuser
+!default.perspectivev3
+
+# macOS specific
+**/Flutter/ephemeral/
+**/Pods/
+macos/Flutter/ephemeral/
+
+# Linux specific
+linux/flutter/ephemeral/
+
+# Windows specific
+windows/flutter/ephemeral/
+
+# Build artifacts
+build/
+
+# Environment variables (IMPORTANT: Keep your secrets safe!)
+.env
+
+# IDE and Editor files
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Dependency directories
+node_modules/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# Firebase
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+
+# Supabase
+.supabase/
+
+# Generated files
+*.g.dart
+*.freezed.dart
+*.config.dart
+
+# Test related
+test/coverage/
+coverage/
+.nyc_output/
+
+# Flutter/Dart version management
+.fvm/
+
+# Package manager
+.packages
+pubspec.lock
+
+# Translation related files
+*.arb
+
+# FVM Version Cache
+.fvm/
+
+# Fastlane
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots
+**/fastlane/test_output
