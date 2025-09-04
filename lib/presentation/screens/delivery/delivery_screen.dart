@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:greenstem/domain/entities/delivery.dart';
 import 'package:greenstem/domain/services/delivery_service.dart';
+import 'package:greenstem/domain/repositories/delivery_repository.dart';
+import 'package:greenstem/data/repositories/delivery_repository_impl.dart';
+import 'package:greenstem/data/datasources/delivery_datasource.dart';
 
 class DeliveryScreen extends StatefulWidget {
   const DeliveryScreen({super.key});
@@ -12,10 +15,16 @@ class DeliveryScreen extends StatefulWidget {
 class _DeliveryScreenState extends State<DeliveryScreen> {
   List<Delivery> _deliveries = [];
   bool _isLoading = false;
+  late final DeliveryService _deliveryService;
 
   @override
   void initState() {
     super.initState();
+    // Dependency injection setup
+    final DeliveryDataSource dataSource = SupabaseDeliveryDataSource();
+    final DeliveryRepository repository = DeliveryRepositoryImpl(dataSource);
+    _deliveryService = DeliveryService(repository);
+
     _loadDeliveries();
   }
 
@@ -23,7 +32,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final deliveries = await DeliveryService.getAllDeliveries();
+      final deliveries = await _deliveryService.getAllDeliveries();
       setState(() => _deliveries = deliveries);
     } catch (e) {
       if (mounted) {
@@ -38,7 +47,7 @@ class _DeliveryScreenState extends State<DeliveryScreen> {
 
   Future<void> _markAsCompleted(String deliveryId) async {
     try {
-      await DeliveryService.markAsCompleted(deliveryId);
+      await _deliveryService.markAsCompleted(deliveryId);
       _loadDeliveries(); // Refresh list
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

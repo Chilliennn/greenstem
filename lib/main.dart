@@ -12,7 +12,7 @@ Future<void> main() async {
 
   await Supabase.initialize(
     url: dotenv.env['BASE_URL'] ?? '',
-    anonKey: dotenv.env['API_KEY'] ?? '',
+    anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
   );
   runApp(MyApp());
 }
