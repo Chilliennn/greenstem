@@ -96,7 +96,8 @@ class DeliveryModel {
   }
 
   // Create from domain entity
-  factory DeliveryModel.fromEntity(Delivery entity, {bool? isSynced, bool? needsSync}) {
+  factory DeliveryModel.fromEntity(Delivery entity,
+      {bool? isSynced, bool? needsSync}) {
     return DeliveryModel(
       deliveryId: entity.deliveryId,
       userId: entity.userId,
