@@ -52,17 +52,17 @@ class DeliveryService {
   Future<Delivery> markAsCompleted(String deliveryId) async {
     final deliveryStream = _repository.watchDeliveryById(deliveryId);
     final delivery = await deliveryStream.first;
-    
+
     if (delivery == null) {
       throw Exception('Delivery not found');
     }
-    
+
     final updatedDelivery = delivery.copyWith(
       status: 'completed',
       deliveredTime: DateTime.now(),
       updatedAt: DateTime.now(),
     );
-    
+
     return await updateDelivery(updatedDelivery);
   }
 

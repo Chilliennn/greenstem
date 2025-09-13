@@ -48,8 +48,8 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
   @override
   Stream<List<Delivery>> watchAllDeliveries() {
     return _localDataSource.watchAllDeliveries().map(
-      (models) => models.map((model) => model.toEntity()).toList(),
-    );
+          (models) => models.map((model) => model.toEntity()).toList(),
+        );
   }
 
   @override
