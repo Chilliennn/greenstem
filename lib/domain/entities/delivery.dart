@@ -10,6 +10,7 @@ class Delivery {
   final String? vehicleNumber;
   final String? proofImgPath;
   final DateTime createdAt;
+  final DateTime updatedAt;
 
   const Delivery({
     required this.deliveryId,
@@ -23,19 +24,9 @@ class Delivery {
     this.vehicleNumber,
     this.proofImgPath,
     required this.createdAt,
+    required this.updatedAt,
   });
 
-  // Business logic methods can go here
-  bool get isCompleted => status?.toLowerCase() == 'completed';
-
-  bool get isPending => status?.toLowerCase() == 'pending';
-
-  bool get isOverdue =>
-      dueDatetime != null &&
-      dueDatetime!.isBefore(DateTime.now()) &&
-      !isCompleted;
-
-  // Copy with method for immutability
   Delivery copyWith({
     String? deliveryId,
     String? userId,
@@ -48,6 +39,7 @@ class Delivery {
     String? vehicleNumber,
     String? proofImgPath,
     DateTime? createdAt,
+    DateTime? updatedAt,
   }) {
     return Delivery(
       deliveryId: deliveryId ?? this.deliveryId,
@@ -61,6 +53,27 @@ class Delivery {
       vehicleNumber: vehicleNumber ?? this.vehicleNumber,
       proofImgPath: proofImgPath ?? this.proofImgPath,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+
+  // Business logic
+  bool get isPending => status?.toLowerCase() == 'pending';
+
+  bool get isCompleted => status?.toLowerCase() == 'completed';
+
+  bool get isOverdue =>
+      dueDatetime != null &&
+      dueDatetime!.isBefore(DateTime.now()) &&
+      !isCompleted;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Delivery &&
+          runtimeType == other.runtimeType &&
+          deliveryId == other.deliveryId;
+
+  @override
+  int get hashCode => deliveryId.hashCode;
 }

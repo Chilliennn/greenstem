@@ -1,20 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:io' show Platform;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
 import 'presentation/screens/home/home_screen.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await dotenv.load(fileName: ".env");
+  // Initialize SQLite for desktop platforms
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    // Initialize FFI
+    sqfliteFfiInit();
+    // Change the default factory to use SQLite FFI
+    databaseFactory = databaseFactoryFfi;
+    print('SQLite FFI initialized for desktop platform');
+  }
 
-  await Supabase.initialize(
-    url: dotenv.env['BASE_URL'] ?? '',
-    anonKey: dotenv.env['API_KEY'] ?? '',
-  );
-  runApp(MyApp());
+  try {
+    await dotenv.load(fileName: ".env");
+
+    final url = dotenv.env['BASE_URL'];
+    final key = dotenv.env['SUPABASE_ANON_KEY'];
+
+    if (url == null || url.isEmpty) {
+      throw Exception('BASE_URL not found in .env file');
+    }
+    if (key == null || key.isEmpty) {
+      throw Exception('SUPABASE_ANON_KEY not found in .env file');
+    }
+
+    await Supabase.initialize(url: url, anonKey: key);
+    
+    print('Supabase initialized successfully');
+  } catch (e) {
+    print('Error initializing Supabase: $e');
+  }
+  
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
