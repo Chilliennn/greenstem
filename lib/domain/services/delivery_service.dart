@@ -6,22 +6,24 @@ class DeliveryService {
 
   DeliveryService(this._repository);
 
-  Future<List<Delivery>> getAllDeliveries() async {
-    try {
-      return await _repository.getAllDeliveries();
-    } catch (e) {
-      throw Exception('Failed to get deliveries: $e');
-    }
+  // Stream-based reading (offline-first)
+  Stream<List<Delivery>> watchAllDeliveries() {
+    return _repository.watchAllDeliveries();
   }
 
-  Future<Delivery?> getDeliveryById(String id) async {
-    try {
-      return await _repository.getDeliveryById(id);
-    } catch (e) {
-      throw Exception('Failed to get delivery: $e');
-    }
+  Stream<Delivery?> watchDeliveryById(String id) {
+    return _repository.watchDeliveryById(id);
   }
 
+  Stream<List<Delivery>> watchPendingDeliveries() {
+    return _repository.watchDeliveriesByStatus('pending');
+  }
+
+  Stream<List<Delivery>> watchCompletedDeliveries() {
+    return _repository.watchDeliveriesByStatus('completed');
+  }
+
+  // Write operations (offline-first)
   Future<Delivery> createDelivery(Delivery delivery) async {
     try {
       return await _repository.createDelivery(delivery);
@@ -47,25 +49,32 @@ class DeliveryService {
   }
 
   // Business logic methods
-  Future<List<Delivery>> getPendingDeliveries() async {
-    final deliveries = await getAllDeliveries();
-    return deliveries.where((d) => d.isPending).toList();
-  }
-
-  Future<List<Delivery>> getOverdueDeliveries() async {
-    final deliveries = await getAllDeliveries();
-    return deliveries.where((d) => d.isOverdue).toList();
-  }
-
   Future<Delivery> markAsCompleted(String deliveryId) async {
-    final delivery = await getDeliveryById(deliveryId);
-    if (delivery == null) throw Exception('Delivery not found');
-
+    final deliveryStream = _repository.watchDeliveryById(deliveryId);
+    final delivery = await deliveryStream.first;
+    
+    if (delivery == null) {
+      throw Exception('Delivery not found');
+    }
+    
     final updatedDelivery = delivery.copyWith(
       status: 'completed',
       deliveredTime: DateTime.now(),
+      updatedAt: DateTime.now(),
     );
-
+    
     return await updateDelivery(updatedDelivery);
   }
+
+  // Sync operations
+  Future<void> syncData() async {
+    try {
+      await _repository.syncToRemote();
+      await _repository.syncFromRemote();
+    } catch (e) {
+      throw Exception('Failed to sync data: $e');
+    }
+  }
+
+  Future<bool> hasNetworkConnection() => _repository.hasNetworkConnection();
 }
