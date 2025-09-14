@@ -1,13 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/auth_repository_impl.dart';
-import '../../domain/entities/user.dart';
+import '../../data/repositories/user_repository_impl.dart';
+import '../../data/datasources/local/local_user_database_service.dart';
+import '../../data/datasources/remote/remote_user_datasource.dart';
 import '../../domain/params/sign_in_params.dart';
 import '../../domain/params/sign_up_params.dart';
 import '../../domain/usecases/sign_up_usecase.dart';
 import '../../domain/usecases/sign_in_usecase.dart';
 import '../states/auth_state.dart';
 
-final authRepositoryProvider = Provider((ref) => AuthRepositoryImpl());
+final authRepositoryProvider = Provider((ref) {
+  final localDataSource = LocalUserDatabaseService();
+  final remoteDataSource = SupabaseUserDataSource();
+  final userRepository = UserRepositoryImpl(localDataSource, remoteDataSource);
+  return AuthRepositoryImpl(userRepository);
+});
 
 final signUpUseCaseProvider = Provider((ref) {
   final repository = ref.read(authRepositoryProvider);

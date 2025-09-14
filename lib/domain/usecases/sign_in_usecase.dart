@@ -1,5 +1,6 @@
-import 'package:greenstem/domain/repositories/auth_repository.dart';
-import 'package:greenstem/domain/domain.dart';
+import '../../../domain/repositories/auth_repository.dart';
+import '../../../domain/params/sign_in_params.dart';
+import '../../../domain/entities/user.dart';
 class SignInUseCase{
   final AuthRepository repository;
 

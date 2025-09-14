@@ -3,40 +3,39 @@ import 'package:greenstem/domain/params/sign_in_params.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/params/sign_up_params.dart';
 import '../../domain/repositories/auth_repository.dart';
+import '../../domain/repositories/user_repository.dart';
 
-class AuthRepositoryImpl implements AuthRepository{
+class AuthRepositoryImpl implements AuthRepository {
+  final UserRepository _userRepository;
+
+  AuthRepositoryImpl(this._userRepository);
+
   @override
-  Future<User> signUp(SignUpParams params) async{
-    await Future.delayed(const Duration(seconds: 2));
-    return User(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
+  Future<User> signUp(SignUpParams params) async {
+    final user = User(
+      userId: '',
       firstName: params.firstName,
       lastName: params.lastName,
       username: params.username,
       email: params.email,
-      birthDate: params.birthDate,
+      birthDate: DateTime.tryParse(params.birthDate),
       phoneNo: params.phoneNo,
+      createdAt: DateTime.now(),
     );
+
+    return await _userRepository.register(user);
   }
 
   @override
-  Future<User> signIn(SignInParams params) async{
-    await Future.delayed(const Duration(seconds: 2));
-
-    return User(
-      id: '1',
-      firstName: 'Ho',
-      lastName: 'Shuang Quan',
-      username: 'homahai',
-      email: 'jaft952@gmail.com',
-      birthDate: '04/12/2004',
-      phoneNo: '0122148447',
-    );
+  Future<User> signIn(SignInParams params) async {
+    final user = await _userRepository.login(params.username, params.password);
+    if (user == null) {
+      throw Exception('Login failed');
+    }
+    return user;
   }
 
-  @override
   Future<void> signOut() async {
-    // Mock sign out
-    await Future.delayed(const Duration(seconds: 1));
+    await _userRepository.logout();
   }
 }
