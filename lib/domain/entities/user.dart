@@ -1,5 +1,7 @@
 class User {
   final String userId;
+  final String? firstName;
+  final String? lastName;
   final String? username;
   final String? email;
   final String? password;
@@ -9,11 +11,11 @@ class User {
   final String? profilePath;
   final DateTime createdAt;
   final DateTime? updatedAt;
-  final String? firstName;
-  final String? lastName;
 
   const User({
     required this.userId,
+    this.firstName,
+    this.lastName,
     this.username,
     this.email,
     this.password,
@@ -23,40 +25,44 @@ class User {
     this.profilePath,
     required this.createdAt,
     this.updatedAt,
-    this.firstName,
-    this.lastName,
   });
 
-  User copyWith(
-      {String? userId,
-      String? username,
-      String? email,
-      String? password,
-      String? phoneNo,
-      DateTime? birthDate,
-      String? gender,
-      String? profilePath,
-      DateTime? createdAt,
-      DateTime? updatedAt,
-      String? firstName,
-      String? lastName}) {
+  User copyWith({
+    String? userId,
+    String? firstName,
+    String? lastName,
+    String? username,
+    String? email,
+    String? password,
+    String? phoneNo,
+    DateTime? birthDate,
+    String? gender,
+    String? profilePath,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
     return User(
-        userId: userId ?? this.userId,
-        username: username ?? this.username,
-        email: email ?? this.email,
-        password: password ?? this.password,
-        phoneNo: phoneNo ?? this.phoneNo,
-        birthDate: birthDate ?? this.birthDate,
-        gender: gender ?? this.gender,
-        profilePath: profilePath ?? this.profilePath,
-        createdAt: createdAt ?? this.createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        firstName: firstName ?? this.firstName,
-        lastName: lastName ?? this.lastName);
+      userId: userId ?? this.userId,
+      firstName: firstName ?? this.firstName,
+      lastName: lastName ?? this.lastName,
+      username: username ?? this.username,
+      email: email ?? this.email,
+      password: password ?? this.password,
+      phoneNo: phoneNo ?? this.phoneNo,
+      birthDate: birthDate ?? this.birthDate,
+      gender: gender ?? this.gender,
+      profilePath: profilePath ?? this.profilePath,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
   }
 
   // Business logic
   bool get hasUsername => username != null && username!.isNotEmpty;
+
+  bool get hasFirstName => firstName != null && firstName!.isNotEmpty;
+
+  bool get hasLastName => lastName != null && lastName!.isNotEmpty;
 
   bool get hasEmail => email != null && email!.isNotEmpty;
 
