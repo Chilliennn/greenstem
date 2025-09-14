@@ -2,13 +2,13 @@ import 'dart:async';
 import 'package:uuid/uuid.dart';
 import '../../domain/entities/delivery.dart';
 import '../../domain/repositories/delivery_repository.dart';
-import '../datasources/local/local_database_service.dart';
+import '../datasources/local/local_delivery_database_service.dart';
 import '../datasources/remote/remote_delivery_datasource.dart';
 import '../models/delivery_model.dart';
 import '../../core/services/network_service.dart';
 
 class DeliveryRepositoryImpl implements DeliveryRepository {
-  final LocalDatabaseService _localDataSource;
+  final LocalDeliveryDatabaseService _localDataSource;
   final RemoteDeliveryDataSource _remoteDataSource;
   Timer? _syncTimer;
 

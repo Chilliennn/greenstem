@@ -6,7 +6,7 @@ import '../../../domain/services/delivery_service.dart';
 import '../../../domain/services/user_service.dart';
 import '../../../data/repositories/delivery_repository_impl.dart';
 import '../../../data/repositories/user_repository_impl.dart';
-import '../../../data/datasources/local/local_database_service.dart';
+import '../../../data/datasources/local/local_delivery_database_service.dart';
 import '../../../data/datasources/local/local_user_database_service.dart';
 import '../../../data/datasources/remote/remote_delivery_datasource.dart';
 import '../../../data/datasources/remote/remote_user_datasource.dart';
@@ -45,7 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _initializeServices() {
     // Delivery services
-    final localDeliveryDataSource = LocalDatabaseService();
+    final localDeliveryDataSource = LocalDeliveryDatabaseService();
     final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
     _deliveryRepository = DeliveryRepositoryImpl(
         localDeliveryDataSource, remoteDeliveryDataSource);

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../domain/entities/delivery.dart';
 import '../../../domain/services/delivery_service.dart';
 import '../../../data/repositories/delivery_repository_impl.dart';
-import '../../../data/datasources/local/local_database_service.dart';
+import '../../../data/datasources/local/local_delivery_database_service.dart';
 import '../../../data/datasources/remote/remote_delivery_datasource.dart';
 import '../../../core/services/network_service.dart';
 import '../profile/profile_screen.dart';
@@ -43,7 +43,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
   }
 
   void _initializeServices() {
-    final localDataSource = LocalDatabaseService();
+    final localDataSource = LocalDeliveryDatabaseService();
     final remoteDataSource = SupabaseDeliveryDataSource();
     _repository = DeliveryRepositoryImpl(localDataSource, remoteDataSource);
     _deliveryService = DeliveryService(_repository);
