@@ -108,6 +108,8 @@ class LocalUserDatabaseService {
         profile_path TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT,
+        first_name TEXT,
+        last_name TEXT,
         is_synced INTEGER NOT NULL DEFAULT 0,
         needs_sync INTEGER NOT NULL DEFAULT 1,
         is_current_user INTEGER NOT NULL DEFAULT 0
@@ -176,6 +178,8 @@ class LocalUserDatabaseService {
           profile_path TEXT,
           created_at TEXT NOT NULL,
           updated_at TEXT,
+          first_name TEXT,
+          last_name TEXT,
           is_synced INTEGER NOT NULL DEFAULT 0,
           needs_sync INTEGER NOT NULL DEFAULT 1,
           is_current_user INTEGER NOT NULL DEFAULT 0

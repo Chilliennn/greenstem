@@ -11,6 +11,8 @@ class UserModel {
   final String? profilePath;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  final String? firstName;
+  final String? lastName;
   final bool isSynced;
   final bool needsSync;
   final bool isCurrentUser;
@@ -26,6 +28,8 @@ class UserModel {
     this.profilePath,
     required this.createdAt,
     this.updatedAt,
+    this.firstName,
+    this.lastName,
     this.isSynced = false,
     this.needsSync = true,
     this.isCurrentUser = false,
@@ -47,6 +51,8 @@ class UserModel {
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'] as String)
           : null,
+      firstName: json['first_name'] as String?,
+      lastName: json['last_name'] as String?,
       isSynced: (json['is_synced'] as int?) == 1,
       needsSync: (json['needs_sync'] as int?) == 1,
       isCurrentUser: (json['is_current_user'] as int?) == 1,
@@ -65,6 +71,8 @@ class UserModel {
       'profile_path': profilePath,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
+      'first_name': firstName,
+      'last_name': lastName,
       'is_synced': isSynced ? 1 : 0,
       'needs_sync': needsSync ? 1 : 0,
       'is_current_user': isCurrentUser ? 1 : 0,
@@ -82,6 +90,8 @@ class UserModel {
       birthDate: birthDate,
       gender: gender,
       profilePath: profilePath,
+      firstName: firstName,
+      lastName: lastName,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );
@@ -105,6 +115,8 @@ class UserModel {
       profilePath: entity.profilePath,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
+      firstName: entity.firstName,
+      lastName: entity.lastName,
       isSynced: isSynced ?? false,
       needsSync: needsSync ?? true,
       isCurrentUser: isCurrentUser ?? false,
@@ -122,6 +134,8 @@ class UserModel {
     String? profilePath,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? firstName,
+    String? lastName,
     bool? isSynced,
     bool? needsSync,
     bool? isCurrentUser,
@@ -137,6 +151,8 @@ class UserModel {
       profilePath: profilePath ?? this.profilePath,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      firstName: firstName ?? this.firstName,
+      lastName: lastName ?? this.lastName,
       isSynced: isSynced ?? this.isSynced,
       needsSync: needsSync ?? this.needsSync,
       isCurrentUser: isCurrentUser ?? this.isCurrentUser,

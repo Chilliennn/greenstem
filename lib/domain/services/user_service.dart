@@ -100,6 +100,8 @@ class UserService {
     DateTime? birthDate,
     String? gender,
     String? profilePath,
+    String? firstName,
+    String? lastName,
   }) async {
     try {
       if (email != null &&
@@ -115,6 +117,8 @@ class UserService {
         birthDate: birthDate,
         gender: gender,
         profilePath: profilePath,
+        firstName: firstName,
+        lastName: lastName,
       );
     } catch (e) {
       throw Exception('Failed to update profile: $e');

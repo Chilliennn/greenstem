@@ -9,6 +9,8 @@ class User {
   final String? profilePath;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  final String? firstName;
+  final String? lastName;
 
   const User({
     required this.userId,
@@ -21,32 +23,36 @@ class User {
     this.profilePath,
     required this.createdAt,
     this.updatedAt,
+    this.firstName,
+    this.lastName,
   });
 
-  User copyWith({
-    String? userId,
-    String? username,
-    String? email,
-    String? password,
-    String? phoneNo,
-    DateTime? birthDate,
-    String? gender,
-    String? profilePath,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-  }) {
+  User copyWith(
+      {String? userId,
+      String? username,
+      String? email,
+      String? password,
+      String? phoneNo,
+      DateTime? birthDate,
+      String? gender,
+      String? profilePath,
+      DateTime? createdAt,
+      DateTime? updatedAt,
+      String? firstName,
+      String? lastName}) {
     return User(
-      userId: userId ?? this.userId,
-      username: username ?? this.username,
-      email: email ?? this.email,
-      password: password ?? this.password,
-      phoneNo: phoneNo ?? this.phoneNo,
-      birthDate: birthDate ?? this.birthDate,
-      gender: gender ?? this.gender,
-      profilePath: profilePath ?? this.profilePath,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
+        userId: userId ?? this.userId,
+        username: username ?? this.username,
+        email: email ?? this.email,
+        password: password ?? this.password,
+        phoneNo: phoneNo ?? this.phoneNo,
+        birthDate: birthDate ?? this.birthDate,
+        gender: gender ?? this.gender,
+        profilePath: profilePath ?? this.profilePath,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        firstName: firstName ?? this.firstName,
+        lastName: lastName ?? this.lastName);
   }
 
   // Business logic
@@ -61,6 +67,8 @@ class User {
   bool get hasBirthDate => birthDate != null;
 
   bool get hasGender => gender != null && gender!.isNotEmpty;
+
+  String get fullName => '$firstName $lastName';
 
   String get displayName => username ?? email ?? 'Unknown User';
 
