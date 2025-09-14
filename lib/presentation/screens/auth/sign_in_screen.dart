@@ -5,7 +5,7 @@ import '../../../data/repositories/user_repository_impl.dart';
 import '../../../data/datasources/local/local_user_database_service.dart';
 import '../../../data/datasources/remote/remote_user_datasource.dart';
 import '../../../core/services/network_service.dart';
-import '../delivery_dashboard/delivery_dashboard_screen.dart';
+import '../home/home_screen.dart';
 import 'sign_up_screen.dart';
 
 class SignInScreen extends StatefulWidget {
@@ -75,7 +75,7 @@ class _SignInScreenState extends State<SignInScreen> {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (context) => const DeliveryDashboardScreen(),
+              builder: (context) => const HomeScreen(),
             ),
           );
         }
