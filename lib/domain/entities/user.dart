@@ -74,6 +74,8 @@ class User {
 
   bool get hasGender => gender != null && gender!.isNotEmpty;
 
+  String get fullName => '$firstName $lastName';
+
   String get displayName => username ?? email ?? 'Unknown User';
 
   int? get age {

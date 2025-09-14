@@ -243,15 +243,15 @@ class UserRepositoryImpl implements UserRepository {
   }
 
   @override
-  Future<User> updateProfile(
-    String userId, {
-    String? username,
-    String? email,
-    String? phoneNo,
-    DateTime? birthDate,
-    String? gender,
-    String? profilePath,
-  }) async {
+  Future<User> updateProfile(String userId,
+      {String? username,
+      String? email,
+      String? phoneNo,
+      DateTime? birthDate,
+      String? gender,
+      String? profilePath,
+      String? firstName,
+      String? lastName}) async {
     try {
       final currentUser = await _localDataSource.getUserById(userId);
       if (currentUser == null) {
