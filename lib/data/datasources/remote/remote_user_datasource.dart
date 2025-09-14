@@ -183,6 +183,8 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
         updatedAt: json['updated_at'] != null
             ? DateTime.tryParse(json['updated_at'].toString())
             : null,
+        firstName: json['first_name']?.toString(),
+        lastName: json['last_name']?.toString(),
         isSynced: true,
         // Remote data is always synced
         needsSync: false,

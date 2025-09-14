@@ -27,15 +27,15 @@ abstract class UserRepository {
   Future<void> deleteUser(String userId);
 
   // Profile operations
-  Future<User> updateProfile(
-    String userId, {
-    String? username,
-    String? email,
-    String? phoneNo,
-    DateTime? birthDate,
-    String? gender,
-    String? profilePath,
-  });
+  Future<User> updateProfile(String userId,
+      {String? username,
+      String? email,
+      String? phoneNo,
+      DateTime? birthDate,
+      String? gender,
+      String? profilePath,
+      String? firstName,
+      String? lastName});
 
   Future<User> changePassword(
       String userId, String oldPassword, String newPassword);
