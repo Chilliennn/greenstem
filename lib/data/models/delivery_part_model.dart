@@ -1,32 +1,29 @@
-import '../../domain/entities/part.dart';
+import '../../domain/entities/delivery_part.dart';
 
-class PartModel {
-  final String partId;
-  final String? name;
-  final String? description;
-  final String? category;
+class DeliveryPartModel {
+  final String deliveryId;
+  final String? partId;
+  final int? quantity;
   final DateTime createdAt;
   final DateTime? updatedAt;
   final bool isSynced;
   final bool needsSync;
 
-  const PartModel({
-    required this.partId,
-    this.name,
-    this.description,
-    this.category,
+  const DeliveryPartModel({
+    required this.deliveryId,
+    this.partId,
+    this.quantity,
     required this.createdAt,
     this.updatedAt,
     this.isSynced = false,
     this.needsSync = true,
   });
 
-  factory PartModel.fromJson(Map<String, dynamic> json) {
-    return PartModel(
-      partId: json['part_id'] as String,
-      name: json['name'] as String?,
-      description: json['description'] as String?,
-      category: json['category'] as String?,
+  factory DeliveryPartModel.fromJson(Map<String, dynamic> json) {
+    return DeliveryPartModel(
+      deliveryId: json['delivery_id'] as String,
+      partId: json['part_id'] as String?,
+      quantity: json['quantity'] as int?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'] as String)
@@ -38,10 +35,9 @@ class PartModel {
 
   Map<String, dynamic> toJson() {
     return {
+      'delivery_id': deliveryId,
       'part_id': partId,
-      'name': name,
-      'description': description,
-      'category': category,
+      'quantity': quantity,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
       'is_synced': isSynced ? 1 : 0,
@@ -50,24 +46,23 @@ class PartModel {
   }
 
   // Convert to domain entity
-  Part toEntity() {
-    return Part(
+  DeliveryPart toEntity() {
+    return DeliveryPart(
+      deliveryId: deliveryId,
       partId: partId,
-      name: name,
-      description: description,
-      category: category,
+      quantity: quantity,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );
   }
 
   // Create from domain entity
-  factory PartModel.fromEntity(Part entity, {bool? isSynced, bool? needsSync}) {
-    return PartModel(
+  factory DeliveryPartModel.fromEntity(DeliveryPart entity,
+      {bool? isSynced, bool? needsSync}) {
+    return DeliveryPartModel(
+      deliveryId: entity.deliveryId,
       partId: entity.partId,
-      name: entity.name,
-      description: entity.description,
-      category: entity.category,
+      quantity: entity.quantity,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
       isSynced: isSynced ?? false,
@@ -75,21 +70,19 @@ class PartModel {
     );
   }
 
-  PartModel copyWith({
+  DeliveryPartModel copyWith({
+    String? deliveryId,
     String? partId,
-    String? name,
-    String? description,
-    String? category,
+    int? quantity,
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? isSynced,
     bool? needsSync,
   }) {
-    return PartModel(
+    return DeliveryPartModel(
+      deliveryId: deliveryId ?? this.deliveryId,
       partId: partId ?? this.partId,
-      name: name ?? this.name,
-      description: description ?? this.description,
-      category: category ?? this.category,
+      quantity: quantity ?? this.quantity,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isSynced: isSynced ?? this.isSynced,

@@ -115,7 +115,7 @@ windows/flutter/ephemeral/
 build/
 
 # Environment variables (IMPORTANT: Keep your secrets safe!)
-.env
+# .env
 
 # IDE and Editor files
 .vscode/settings.json

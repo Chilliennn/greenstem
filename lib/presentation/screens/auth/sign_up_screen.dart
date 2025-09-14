@@ -1,9 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:greenstem/domain/domain.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/network_service.dart';
+import '../../../domain/services/user_service.dart';
+import '../../../domain/params/sign_up_params.dart';
+import '../../../data/repositories/user_repository_impl.dart';
+import '../../../data/datasources/local/local_user_database_service.dart';
+import '../../../data/datasources/remote/remote_user_datasource.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
@@ -26,9 +32,15 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   final _phoneNoController = TextEditingController();
   final _birthDateController = TextEditingController();
 
+  late final UserService _userService;
+  late final UserRepositoryImpl _repository;
+
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
+  bool _isLoading = false;
+  bool _isOnline = false;
   String _selectedCountryCode = '+60';
+  StreamSubscription<bool>? _connectivitySubscription;
 
   final List<Map<String, String>> _countryCodes = [
     {'code': '+60', 'flag': 'MY', 'country': 'Malaysia'},
@@ -40,16 +52,34 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   ];
 
   @override
-  void dispose() {
-    _usernameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
-    _firstNameController.dispose();
-    _lastNameController.dispose();
-    _phoneNoController.dispose();
-    _birthDateController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _initializeServices();
+    _checkConnectivity();
+    _listenToConnectivity();
+  }
+
+  void _initializeServices() {
+    final localDataSource = LocalUserDatabaseService();
+    final remoteDataSource = SupabaseUserDataSource();
+    _repository = UserRepositoryImpl(localDataSource, remoteDataSource);
+    _userService = UserService(_repository);
+  }
+
+  Future<void> _checkConnectivity() async {
+    final isOnline = await NetworkService.hasConnection();
+    if (mounted) {
+      setState(() => _isOnline = isOnline);
+    }
+  }
+
+  void _listenToConnectivity() {
+    _connectivitySubscription =
+        NetworkService.connectionStream.listen((isConnected) {
+      if (mounted) {
+        setState(() => _isOnline = isConnected);
+      }
+    });
   }
 
   Future<void> _selectDate() async {
@@ -84,7 +114,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       final params = SignUpParams(
         firstName: _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim(),
-        username: _emailController.text.trim(), 
+        username: _emailController.text.trim(),
         email: _emailController.text.trim(),
         phoneNo: '$_selectedCountryCode${_phoneNoController.text.trim()}',
         birthDate: _birthDateController.text.trim(),
@@ -431,5 +461,20 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
         );
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _phoneNoController.dispose();
+    _birthDateController.dispose();
+    _connectivitySubscription?.cancel();
+    _repository.dispose();
+    super.dispose();
   }
 }
