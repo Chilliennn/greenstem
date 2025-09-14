@@ -7,7 +7,7 @@ extension _ListExtension<T> on List<T> {
   T? get firstOrNull => isEmpty ? null : first;
 }
 
-class LocalDatabaseService {
+class LocalDeliveryDatabaseService {
   static Database? _database;
   static const String _tableName = 'deliveries';
   final StreamController<List<DeliveryModel>> _deliveriesController =
