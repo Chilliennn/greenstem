@@ -14,7 +14,7 @@ abstract class RemoteUserDataSource {
 
   Future<void> deleteUser(String userId);
 
-  Future<UserModel?> login(String email, String password);
+  Future<UserModel?> login(String username, String password);
 
   Future<UserModel> register(UserModel user);
 
@@ -28,7 +28,7 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
   Future<List<UserModel>> getAllUsers() async {
     try {
       final response = await _client
-          .from('profile')
+          .from('user')
           .select()
           .order('created_at', ascending: false);
 
@@ -44,7 +44,7 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
   Future<UserModel?> getUserById(String userId) async {
     try {
       final response = await _client
-          .from('profile')
+          .from('user')
           .select()
           .eq('user_id', userId)
           .maybeSingle();
@@ -58,11 +58,8 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
   @override
   Future<UserModel?> getUserByEmail(String email) async {
     try {
-      final response = await _client
-          .from('profile')
-          .select()
-          .eq('email', email)
-          .maybeSingle();
+      final response =
+          await _client.from('user').select().eq('email', email).maybeSingle();
 
       return response != null ? _safeParseUserModel(response) : null;
     } catch (e) {
@@ -80,7 +77,7 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
       data.remove('is_current_user');
 
       final response =
-          await _client.from('profile').insert(data).select().single();
+          await _client.from('user').insert(data).select().single();
 
       return _safeParseUserModel(response);
     } catch (e) {
@@ -99,7 +96,7 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
       data.remove('password'); // Don't update password through this method
 
       final response = await _client
-          .from('profile')
+          .from('user')
           .update(data)
           .eq('user_id', user.userId)
           .select()
@@ -114,21 +111,21 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
   @override
   Future<void> deleteUser(String userId) async {
     try {
-      await _client.from('profile').delete().eq('user_id', userId);
+      await _client.from('user').delete().eq('user_id', userId);
     } catch (e) {
       throw Exception('Failed to delete profile on remote: $e');
     }
   }
 
   @override
-  Future<UserModel?> login(String email, String password) async {
+  Future<UserModel?> login(String username, String password) async {
     try {
       // Note: In a real app, you would use Supabase Auth
       // This is a simplified version for demonstration
       final response = await _client
-          .from('profile')
+          .from('user')
           .select()
-          .eq('email', email)
+          .eq('username', username)
           .eq('password', password) // In real app, use hashed passwords
           .maybeSingle();
 

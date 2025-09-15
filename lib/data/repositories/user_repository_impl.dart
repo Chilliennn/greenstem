@@ -75,14 +75,14 @@ class UserRepositoryImpl implements UserRepository {
   }
 
   @override
-  Future<User?> login(String email, String password) async {
+  Future<User?> login(String username, String password) async {
     try {
       UserModel? userModel;
 
       if (await hasNetworkConnection()) {
         // Try remote login first
         try {
-          userModel = await _remoteDataSource.login(email, password);
+          userModel = await _remoteDataSource.login(username, password);
           if (userModel != null) {
             // Save to local database and set as current profile
             final localModel = userModel.copyWith(
@@ -100,7 +100,7 @@ class UserRepositoryImpl implements UserRepository {
 
       // Fallback to local login
       if (userModel == null) {
-        userModel = await _localDataSource.getUserByEmail(email);
+        userModel = await _localDataSource.getUserByUsername(username);
         if (userModel != null && userModel.password == password) {
           await _localDataSource.setCurrentUser(userModel.userId);
         } else {
@@ -399,6 +399,40 @@ class UserRepositoryImpl implements UserRepository {
   @override
   Future<void> clearCache() async {
     await _localDataSource.clearAll();
+  }
+
+  @override
+  Future<void> resetPassword(String email, String newPassword) async {
+    try {
+      // Get user by email
+      final userModel = await _localDataSource.getUserByEmail(email);
+      if (userModel == null) {
+        throw Exception('User not found');
+      }
+
+      // Update password locally
+      final updatedModel = userModel.copyWith(
+        password: newPassword,
+        updatedAt: DateTime.now(),
+        isSynced: false,
+        needsSync: true,
+      );
+
+      await _localDataSource.updateUser(updatedModel);
+
+      // Try to sync immediately if connected
+      if (await hasNetworkConnection()) {
+        try {
+          await _remoteDataSource.updateUser(updatedModel);
+          await _localDataSource.markAsSynced(userModel.userId);
+        } catch (e) {
+          print('Failed to sync password reset to remote: $e');
+          // Password was updated locally, will sync later
+        }
+      }
+    } catch (e) {
+      throw Exception('Failed to reset password: $e');
+    }
   }
 
   void dispose() {

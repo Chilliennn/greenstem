@@ -7,7 +7,9 @@ import '../../../domain/params/sign_in_params.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
+import '../home/home_screen.dart';
 import 'sign_up_screen.dart';
+import 'forgot_password_screen.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
@@ -31,6 +33,23 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     super.initState();
     _checkConnectivity();
     _listenToConnectivity();
+    _loadSavedCredentials();
+  }
+
+  Future<void> _loadSavedCredentials() async {
+    // Load saved credentials if remember me was previously enabled
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final authNotifier = ref.read(authProvider.notifier);
+      final savedUsername = authNotifier.getSavedUsername();
+      final rememberMeStatus = authNotifier.getRememberMeStatus();
+
+      if (mounted && savedUsername != null && rememberMeStatus) {
+        setState(() {
+          _usernameController.text = savedUsername;
+          _rememberMe = rememberMeStatus;
+        });
+      }
+    });
   }
 
   Future<void> _checkConnectivity() async {
@@ -58,7 +77,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         password: _passwordController.text,
       );
 
-      authNotifier.signIn(params: params);
+      authNotifier.signIn(
+        params: params,
+        rememberMe: _rememberMe,
+      );
     }
   }
 
@@ -103,57 +125,47 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
             );
           }
 
-          if (current.user != null && !current.isLoading) {
-            Navigator.pushReplacementNamed(context, '/home');
+          // Only navigate if user just became non-null (successful login)
+          if (current.user != null &&
+              !current.isLoading &&
+              previous?.user == null &&
+              current.errorMessage == null) {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+              (route) => false,
+            );
           }
         });
 
         return Scaffold(
-          body: Container(
-            decoration: const BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage('assets/images/AuthBackground.png'),
-                fit: BoxFit.cover,
-              ),
-            ),
-            child: SafeArea(
-              child: Stack(
-                children: [
-                  // Back button
-                  Positioned(
-                    top: 0,
-                    left: 16,
-                    child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        child: const Icon(
-                          Icons.arrow_back,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                    ),
+          body: Stack(
+            children: [
+              // Fixed background image
+              Container(
+                decoration: const BoxDecoration(
+                  image: DecorationImage(
+                    image: AssetImage('assets/images/AuthBackground.png'),
+                    fit: BoxFit.cover,
                   ),
-                  // Main content
-                  Center(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                ),
+              ),
+              // Scrollable content
+              SafeArea(
+                child: Stack(
+                  children: [
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.start,
                         children: [
-                          // Logo/Icon
+                          const SizedBox(height: 20),
+                          // Logo
                           Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(40),
-                            ),
+                            width: 150,
+                            height: 150,
                             child: Image.asset('assets/images/logo.png'),
                           ),
-                          const SizedBox(height: 24),
-                          
                           // Title
                           const Text(
                             'Sign in to your\nAccount',
@@ -165,8 +177,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                               height: 1.2,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          
+                          const SizedBox(height: 4),
+
                           // Subtitle
                           const Text(
                             'Enter your email and password to log in',
@@ -176,8 +188,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                               color: Colors.white70,
                             ),
                           ),
-                          const SizedBox(height: 40),
-                          
+                          const SizedBox(height: 8),
+
                           // Form Card
                           Container(
                             padding: const EdgeInsets.all(24),
@@ -210,7 +222,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                     },
                                   ),
                                   const SizedBox(height: 20),
-                                  
+
                                   // Password
                                   CustomTextField(
                                     controller: _passwordController,
@@ -219,13 +231,16 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                     useOutlineBorder: true,
                                     suffixIcon: IconButton(
                                       icon: Icon(
-                                        _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                                        _isPasswordVisible
+                                            ? Icons.visibility
+                                            : Icons.visibility_off,
                                         color: Colors.grey,
                                         size: 20,
                                       ),
                                       onPressed: () {
                                         setState(() {
-                                          _isPasswordVisible = !_isPasswordVisible;
+                                          _isPasswordVisible =
+                                              !_isPasswordVisible;
                                         });
                                       },
                                     ),
@@ -237,10 +252,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                     },
                                   ),
                                   const SizedBox(height: 16),
-                                  
+
                                   // Remember me and Forgot password row
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Row(
                                         children: [
@@ -264,10 +280,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                       ),
                                       GestureDetector(
                                         onTap: () {
-                                          // TODO: Implement forgot password
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(
-                                              content: Text('Forgot password feature coming soon'),
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  const ForgotPasswordScreen(),
                                             ),
                                           );
                                         },
@@ -283,15 +300,16 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 24),
-                                  
+
                                   // Sign In Button
                                   CustomButton(
                                     text: 'Log In',
-                                    onPressed: authState.isLoading ? null : _signIn,
+                                    onPressed:
+                                        authState.isLoading ? null : _signIn,
                                     isLoading: authState.isLoading,
                                   ),
                                   const SizedBox(height: 16),
-                                  
+
                                   // Sign Up Link
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -299,7 +317,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                       const Text(
                                         "Don't have an account? ",
                                         style: TextStyle(
-                                          color: AppColors.cdarkgray,
+                                          color: AppColors.cdarkgrey,
                                           fontSize: 16,
                                         ),
                                       ),
@@ -320,14 +338,14 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 40),
+                          const SizedBox(height: 20),
                         ],
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+            ],
           ),
         );
       },

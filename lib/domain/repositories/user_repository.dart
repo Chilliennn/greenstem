@@ -11,7 +11,7 @@ abstract class UserRepository {
   Stream<User?> watchCurrentUser();
 
   // Authentication operations
-  Future<User?> login(String email, String password);
+  Future<User?> login(String username, String password);
 
   Future<User> register(User user);
 
@@ -39,6 +39,9 @@ abstract class UserRepository {
 
   Future<User> changePassword(
       String userId, String oldPassword, String newPassword);
+
+  // Password reset operations
+  Future<void> resetPassword(String email, String newPassword);
 
   // Sync operations
   Future<void> syncToRemote();

@@ -252,6 +252,18 @@ class LocalUserDatabaseService {
     return UserModel.fromJson(result.first);
   }
 
+  Future<UserModel?> getUserByUsername(String username) async {
+    final db = await database;
+    final result = await db.query(
+      _tableName,
+      where: 'username = ?',
+      whereArgs: [username],
+    );
+
+    if (result.isEmpty) return null;
+    return UserModel.fromJson(result.first);
+  }
+
   Future<UserModel?> getCurrentUser() async {
     final db = await database;
     final result = await db.query(
