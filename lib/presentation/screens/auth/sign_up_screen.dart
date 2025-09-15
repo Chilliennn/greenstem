@@ -43,13 +43,49 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   String _selectedCountryCode = '+60';
   StreamSubscription<bool>? _connectivitySubscription;
 
-  final List<Map<String, String>> _countryCodes = [
-    {'code': '+60', 'flag': 'MY', 'country': 'Malaysia'},
-    {'code': '+65', 'flag': 'SG', 'country': 'Singapore'},
-    {'code': '+62', 'flag': 'ID', 'country': 'Indonesia'},
-    {'code': '+86', 'flag': 'CN', 'country': 'China'},
-    {'code': '+91', 'flag': 'IN', 'country': 'India'},
-    {'code': '+1', 'flag': 'US', 'country': 'United States'},
+  final List<Map<String, dynamic>> _countryCodes = [
+    {
+      'code': '+60',
+      'flag': '🇲🇾',
+      'country': 'Malaysia',
+      'minLength': 9,
+      'maxLength': 10
+    },
+    {
+      'code': '+65',
+      'flag': '🇸🇬',
+      'country': 'Singapore',
+      'minLength': 8,
+      'maxLength': 8
+    },
+    {
+      'code': '+62',
+      'flag': '🇮🇩',
+      'country': 'Indonesia',
+      'minLength': 9,
+      'maxLength': 12
+    },
+    {
+      'code': '+86',
+      'flag': '🇨🇳',
+      'country': 'China',
+      'minLength': 11,
+      'maxLength': 11
+    },
+    {
+      'code': '+91',
+      'flag': '🇮🇳',
+      'country': 'India',
+      'minLength': 10,
+      'maxLength': 10
+    },
+    {
+      'code': '+1',
+      'flag': '🇺🇸',
+      'country': 'United States',
+      'minLength': 10,
+      'maxLength': 10
+    },
   ];
 
   @override
@@ -94,9 +130,9 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
               primary: AppColors.cyellow,
-              onPrimary: Colors.white,
-              surface: AppColors.cdarkgray,
-              onSurface: Colors.white,
+              onPrimary: Colors.black,
+              surface: Colors.white,
+              onSurface: Colors.black,
             ),
           ),
           child: child!,
@@ -115,7 +151,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       final params = SignUpParams(
         firstName: _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim(),
-        username: _emailController.text.trim(),
+        username: _usernameController.text.trim(),
         email: _emailController.text.trim(),
         phoneNo: '$_selectedCountryCode${_phoneNoController.text.trim()}',
         birthDate: _birthDateController.text.trim(),
@@ -127,7 +163,40 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   }
 
   void _navigateToLogin() {
-    MaterialPageRoute(builder: (context) => const SignInScreen());
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const SignInScreen()),
+        (route) => false,
+      );
+    }
+  }
+
+  String? _validatePhoneNumber(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter your phone number';
+    }
+
+    // Find the selected country info
+    final selectedCountry = _countryCodes.firstWhere(
+      (country) => country['code'] == _selectedCountryCode,
+      orElse: () => _countryCodes[0],
+    );
+
+    final minLength = selectedCountry['minLength'] as int;
+    final maxLength = selectedCountry['maxLength'] as int;
+    final countryName = selectedCountry['country'] as String;
+
+    // Remove any non-digit characters for validation
+    final digitsOnly = value.replaceAll(RegExp(r'[^\d]'), '');
+
+    if (digitsOnly.length < minLength) {
+      return 'Phone number too short for $countryName (min $minLength digits)';
+    } else if (digitsOnly.length > maxLength) {
+      return 'Phone number too long for $countryName (max $maxLength digits)';
+    }
+
+    return null;
   }
 
   @override
@@ -165,7 +234,31 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
           }
 
           if (current.user != null && !current.isLoading) {
-            Navigator.pushReplacementNamed(context, '/home');
+            // Show success dialog and navigate to sign in
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Registration Successful!'),
+                    content: const Text(
+                        'Your account has been created successfully. Please sign in to continue.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          if (mounted) {
+                            Navigator.pop(context); // Close dialog
+                            _navigateToLogin(); // Navigate to sign in
+                          }
+                        },
+                        child: const Text('OK'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            });
           }
         });
 
@@ -180,23 +273,6 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
             child: SafeArea(
               child: Stack(
                 children: [
-                  // Back button
-                  Positioned(
-                    top: 0,
-                    left: 16,
-                    child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-
-                        child: const Icon(
-                          Icons.arrow_back,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                    ),
-                  ),
                   // Main content
                   Center(
                     child: SingleChildScrollView(
@@ -242,7 +318,8 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                           labelText: 'First Name',
                                           useOutlineBorder: true,
                                           validator: (value) {
-                                            if (value == null || value.isEmpty) {
+                                            if (value == null ||
+                                                value.isEmpty) {
                                               return 'Please enter first name';
                                             }
                                             return null;
@@ -256,7 +333,8 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                           labelText: 'Last Name',
                                           useOutlineBorder: true,
                                           validator: (value) {
-                                            if (value == null || value.isEmpty) {
+                                            if (value == null ||
+                                                value.isEmpty) {
                                               return 'Please enter last name';
                                             }
                                             return null;
@@ -266,7 +344,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 20),
-                                  
+
                                   // Email
                                   CustomTextField(
                                     controller: _emailController,
@@ -277,14 +355,16 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                       if (value == null || value.isEmpty) {
                                         return 'Please enter email';
                                       }
-                                      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                                      if (!RegExp(
+                                              r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                                          .hasMatch(value)) {
                                         return 'Please enter a valid email';
                                       }
                                       return null;
                                     },
                                   ),
                                   const SizedBox(height: 20),
-                                  
+
                                   // Birth Date
                                   GestureDetector(
                                     onTap: _selectDate,
@@ -308,17 +388,20 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 20),
-                                  
+
                                   // Phone Number Row
                                   Row(
                                     children: [
                                       // Country Code Dropdown
                                       Container(
                                         height: 56,
-                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12),
                                         decoration: BoxDecoration(
-                                          border: Border.all(color: Colors.grey.shade300),
-                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(
+                                              color: Colors.grey.shade300),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
                                         ),
                                         child: DropdownButtonHideUnderline(
                                           child: DropdownButton<String>(
@@ -327,16 +410,19 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                               return DropdownMenuItem<String>(
                                                 value: country['code'],
                                                 child: Row(
-                                                  mainAxisSize: MainAxisSize.min,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
                                                   children: [
                                                     Text(
                                                       country['flag']!,
-                                                      style: const TextStyle(fontSize: 18),
+                                                      style: const TextStyle(
+                                                          fontSize: 18),
                                                     ),
                                                     const SizedBox(width: 4),
                                                     Text(
                                                       country['code']!,
-                                                      style: const TextStyle(fontSize: 16),
+                                                      style: const TextStyle(
+                                                          fontSize: 16),
                                                     ),
                                                   ],
                                                 ),
@@ -344,14 +430,15 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                             }).toList(),
                                             onChanged: (String? newValue) {
                                               setState(() {
-                                                _selectedCountryCode = newValue!;
+                                                _selectedCountryCode =
+                                                    newValue!;
                                               });
                                             },
                                           ),
                                         ),
                                       ),
                                       const SizedBox(width: 12),
-                                      
+
                                       // Phone Number Input
                                       Expanded(
                                         child: CustomTextField(
@@ -360,24 +447,18 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                           keyboardType: TextInputType.phone,
                                           useOutlineBorder: true,
                                           inputFormatters: [
-                                            FilteringTextInputFormatter.digitsOnly,
-                                            LengthLimitingTextInputFormatter(15),
+                                            FilteringTextInputFormatter
+                                                .digitsOnly,
+                                            LengthLimitingTextInputFormatter(
+                                                15),
                                           ],
-                                          validator: (value) {
-                                            if (value == null || value.isEmpty) {
-                                              return 'Please enter your phone number';
-                                            }
-                                            if (value.length < 10 || value.length > 11) {
-                                              return 'Please enter a valid phone number';
-                                            }
-                                            return null;
-                                          },
+                                          validator: _validatePhoneNumber,
                                         ),
                                       ),
                                     ],
                                   ),
                                   const SizedBox(height: 20),
-                                  
+
                                   // Username
                                   CustomTextField(
                                     controller: _usernameController,
@@ -394,7 +475,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                     },
                                   ),
                                   const SizedBox(height: 20),
-                                  
+
                                   // Password
                                   CustomTextField(
                                     controller: _passwordController,
@@ -403,13 +484,16 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                     useOutlineBorder: true,
                                     suffixIcon: IconButton(
                                       icon: Icon(
-                                        _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                                        _isPasswordVisible
+                                            ? Icons.visibility
+                                            : Icons.visibility_off,
                                         color: Colors.grey,
                                         size: 20,
                                       ),
                                       onPressed: () {
                                         setState(() {
-                                          _isPasswordVisible = !_isPasswordVisible;
+                                          _isPasswordVisible =
+                                              !_isPasswordVisible;
                                         });
                                       },
                                     ),
@@ -424,7 +508,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                     },
                                   ),
                                   const SizedBox(height: 20),
-                                  
+
                                   // Confirm Password
                                   CustomTextField(
                                     controller: _confirmPasswordController,
@@ -433,13 +517,16 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                     useOutlineBorder: true,
                                     suffixIcon: IconButton(
                                       icon: Icon(
-                                        _isConfirmPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                                        _isConfirmPasswordVisible
+                                            ? Icons.visibility
+                                            : Icons.visibility_off,
                                         color: Colors.grey,
                                         size: 20,
                                       ),
                                       onPressed: () {
                                         setState(() {
-                                          _isConfirmPasswordVisible = !_isConfirmPasswordVisible;
+                                          _isConfirmPasswordVisible =
+                                              !_isConfirmPasswordVisible;
                                         });
                                       },
                                     ),
@@ -454,33 +541,28 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                     },
                                   ),
                                   const SizedBox(height: 32),
-                                  
+
                                   // Register Button
                                   CustomButton(
                                     text: 'Register',
-                                    onPressed: authState.isLoading ? null : _register,
+                                    onPressed:
+                                        authState.isLoading ? null : _register,
                                     isLoading: authState.isLoading,
                                   ),
                                   const SizedBox(height: 8),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      const Text(
-                                        'Already have an account? ', 
-                                        style: TextStyle(
-                                          color: AppColors.cdarkgray, 
-                                          fontSize: 16
-                                        )
-                                      ),
+                                      const Text('Already have an account? ',
+                                          style: TextStyle(
+                                              color: AppColors.cdarkgrey,
+                                              fontSize: 16)),
                                       GestureDetector(
                                         onTap: _navigateToLogin,
-                                        child: const Text(
-                                          'Sign In',
-                                          style: TextStyle(
-                                            color: AppColors.cyellow, 
-                                            fontSize: 16
-                                          )
-                                        ),
+                                        child: const Text('Sign In',
+                                            style: TextStyle(
+                                                color: AppColors.cyellow,
+                                                fontSize: 16)),
                                       ),
                                     ],
                                   ),
@@ -490,6 +572,22 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                           ),
                           const SizedBox(height: 40),
                         ],
+                      ),
+                    ),
+                  ),
+                  // Back button
+                  Positioned(
+                    top: 0,
+                    left: 16,
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        child: const Icon(
+                          Icons.arrow_back,
+                          color: Colors.white,
+                          size: 24,
+                        ),
                       ),
                     ),
                   ),

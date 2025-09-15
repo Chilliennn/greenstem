@@ -6,7 +6,7 @@ import 'dart:io' show Platform;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
-import 'presentation/screens/auth/sign_in_screen.dart';
+import 'presentation/screens/splash/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,12 +34,12 @@ Future<void> main() async {
     }
 
     await Supabase.initialize(url: url, anonKey: key);
-    
+
     print('Supabase initialized successfully');
   } catch (e) {
     print('Error initializing Supabase: $e');
   }
-  
+
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -53,7 +53,7 @@ class MyApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
-      home: const SignInScreen(),
+      home: const SplashScreen(),
       debugShowCheckedModeBanner: false,
     );
   }

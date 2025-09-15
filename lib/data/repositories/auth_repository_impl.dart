@@ -1,4 +1,5 @@
 import 'package:greenstem/domain/params/sign_in_params.dart';
+import 'package:intl/intl.dart';
 
 import '../../domain/entities/user.dart';
 import '../../domain/params/sign_up_params.dart';
@@ -12,13 +13,30 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<User> signUp(SignUpParams params) async {
+    // Parse birth date from dd/MM/yyyy format
+    DateTime? birthDate;
+    try {
+      if (params.birthDate.isNotEmpty) {
+        birthDate = DateFormat('dd/MM/yyyy').parse(params.birthDate);
+      }
+    } catch (e) {
+      print('Failed to parse birth date: ${params.birthDate}, error: $e');
+      // Try other common formats as fallback
+      try {
+        birthDate = DateTime.tryParse(params.birthDate);
+      } catch (e) {
+        print('Failed to parse birth date with DateTime.tryParse: $e');
+      }
+    }
+
     final user = User(
       userId: '',
       firstName: params.firstName,
       lastName: params.lastName,
       username: params.username,
       email: params.email,
-      birthDate: DateTime.tryParse(params.birthDate),
+      password: params.password,
+      birthDate: birthDate,
       phoneNo: params.phoneNo,
       createdAt: DateTime.now(),
     );
