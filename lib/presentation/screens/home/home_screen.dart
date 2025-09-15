@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../domain/entities/delivery.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/services/delivery_service.dart';
@@ -14,16 +15,16 @@ import '../../../core/services/network_service.dart';
 import '../delivery_detail/delivery_detail_screen.dart';
 import '../profile/profile_screen.dart';
 import '../auth/sign_in_screen.dart';
+import '../../providers/auth_provider.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() =>
-      _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   late final DeliveryService _deliveryService;
   late final UserService _userService;
   late final DeliveryRepositoryImpl _deliveryRepository;
@@ -118,7 +119,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _logout() async {
     try {
-      await _userService.logout();
+      // Use auth provider's logout method to properly clear auth state
+      final authNotifier = ref.read(authProvider.notifier);
+      await authNotifier.signOut();
+
       if (mounted) {
         Navigator.pushAndRemoveUntil(
           context,

@@ -286,6 +286,36 @@ class LocalUserDatabaseService {
     return user;
   }
 
+  Future<UserModel> insertOrUpdateUser(UserModel user) async {
+    final db = await database;
+
+    // Check if user already exists
+    final existingUser = await getUserById(user.userId);
+
+    if (existingUser != null) {
+      // User exists, merge important fields and update
+      final mergedUser = existingUser.copyWith(
+        username: user.username,
+        email: user.email,
+        password: user.password,
+        phoneNo: user.phoneNo,
+        birthDate: user.birthDate,
+        gender: user.gender,
+        profilePath: user.profilePath,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        updatedAt: user.updatedAt ?? DateTime.now(),
+        isSynced: user.isSynced,
+        needsSync: user.needsSync,
+        isCurrentUser: user.isCurrentUser,
+      );
+      return await updateUser(mergedUser);
+    } else {
+      // User doesn't exist, insert it
+      return await insertUser(user);
+    }
+  }
+
   Future<UserModel> updateUser(UserModel user) async {
     final db = await database;
     await db.update(
