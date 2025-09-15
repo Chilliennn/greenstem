@@ -90,7 +90,7 @@ class UserRepositoryImpl implements UserRepository {
               needsSync: false,
               isCurrentUser: true,
             );
-            await _localDataSource.insertUser(localModel);
+            await _localDataSource.insertOrUpdateUser(localModel);
             await _localDataSource.setCurrentUser(userModel.userId);
           }
         } catch (e) {
@@ -368,7 +368,7 @@ class UserRepositoryImpl implements UserRepository {
             needsSync: false,
             isCurrentUser: false,
           );
-          await _localDataSource.insertUser(syncedModel);
+          await _localDataSource.insertOrUpdateUser(syncedModel);
         } else if (remoteUser.updatedAt != null &&
             (localUser.updatedAt == null ||
                 remoteUser.updatedAt!.isAfter(localUser.updatedAt!)) &&
