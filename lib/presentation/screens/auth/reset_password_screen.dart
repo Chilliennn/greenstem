@@ -136,10 +136,6 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                       Container(
                         width: 80,
                         height: 80,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(40),
-                        ),
                         child: Image.asset('assets/images/logo.png'),
                       ),
                       const SizedBox(height: 24),
