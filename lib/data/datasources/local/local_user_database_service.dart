@@ -346,13 +346,13 @@ class LocalUserDatabaseService {
   Future<void> setCurrentUser(String userId) async {
     final db = await database;
 
-    // Clear current profile flag from all users
+    // Clear current profiles flag from all users
     await db.update(
       _tableName,
       {'is_current_user': 0},
     );
 
-    // Set current profile flag for specified profile
+    // Set current profiles flag for specified profiles
     await db.update(
       _tableName,
       {'is_current_user': 1},
@@ -366,7 +366,7 @@ class LocalUserDatabaseService {
   Future<void> clearCurrentUser() async {
     final db = await database;
 
-    // Clear current profile flag from all users
+    // Clear current profiles flag from all users
     await db.update(
       _tableName,
       {'is_current_user': 0},

@@ -99,7 +99,7 @@ class User {
     return RegExp(r'^\+?[\d\s\-\(\)]{10,}$').hasMatch(phoneNo!);
   }
 
-  // Create profile without sensitive data (for display purposes)
+  // Create profiles without sensitive data (for display purposes)
   User toPublicUser() {
     return copyWith(password: null);
   }

@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:greenstem/presentation/widgets/home/active_tab.dart';
-import 'package:greenstem/presentation/widgets/home/history_tab.dart';
-import 'package:greenstem/presentation/widgets/home/sliding_tab_switcher.dart';
-import '../../../domain/entities/delivery.dart';
+import '../../../presentation/widgets/home/active_tab.dart';
+import '../../../presentation/widgets/home/history_tab.dart';
+import '../../../presentation/widgets/home/sliding_tab_switcher.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/services/delivery_service.dart';
 import '../../../domain/services/user_service.dart';
@@ -15,10 +14,7 @@ import '../../../data/datasources/local/local_user_database_service.dart';
 import '../../../data/datasources/remote/remote_delivery_datasource.dart';
 import '../../../data/datasources/remote/remote_user_datasource.dart';
 import '../../../core/services/network_service.dart';
-import '../delivery_detail/delivery_detail_screen.dart';
 import '../profile/profile_screen.dart';
-import '../auth/sign_in_screen.dart';
-import '../../providers/auth_provider.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -89,37 +85,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
-  Future<void> _acceptDelivery(Delivery delivery) async {
-    try {
-      final updatedDelivery = delivery.copyWith(
-        status: 'awaiting',
-        updatedAt: DateTime.now(),
-      );
-
-      await _deliveryService.updateDelivery(updatedDelivery);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_isOnline
-                ? 'Delivery accepted'
-                : 'Delivery accepted (will sync when online)'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error accepting delivery: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
   bool isActiveTab = true;
 
   @override
@@ -172,139 +137,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
         ));
-  }
-
-  Widget _buildAcceptedDeliveryCard(Delivery delivery) {
-    Color statusColor;
-    IconData statusIcon;
-
-    switch (delivery.status?.toLowerCase()) {
-      case 'awaiting':
-        statusColor = Colors.orange;
-        statusIcon = Icons.schedule;
-        break;
-      case 'picked up':
-        statusColor = Colors.blue;
-        statusIcon = Icons.local_shipping;
-        break;
-      case 'en route':
-        statusColor = Colors.purple;
-        statusIcon = Icons.navigation;
-        break;
-      case 'delivered':
-        statusColor = Colors.green;
-        statusIcon = Icons.check_circle;
-        break;
-      default:
-        statusColor = Colors.grey;
-        statusIcon = Icons.help;
-    }
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 3,
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DeliveryDetailScreen(
-                delivery: delivery,
-                onDeliveryUpdated: (updatedDelivery) {
-                  // Delivery will be updated through the stream
-                },
-              ),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(statusIcon, color: statusColor, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Delivery ${delivery.deliveryId.substring(0, 8)}...',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: statusColor,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            delivery.status?.toUpperCase() ?? 'UNKNOWN',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.arrow_forward_ios, size: 16),
-                ],
-              ),
-              if (delivery.pickupLocation != null ||
-                  delivery.deliveryLocation != null) ...[
-                const SizedBox(height: 12),
-                const Divider(),
-                const SizedBox(height: 8),
-                if (delivery.pickupLocation != null) ...[
-                  Row(
-                    children: [
-                      Icon(Icons.location_on,
-                          size: 16, color: Colors.grey.shade600),
-                      const SizedBox(width: 8),
-                      Text(
-                        'From: ${delivery.pickupLocation}',
-                        style: TextStyle(color: Colors.grey.shade700),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                ],
-                if (delivery.deliveryLocation != null) ...[
-                  Row(
-                    children: [
-                      Icon(Icons.flag, size: 16, color: Colors.grey.shade600),
-                      const SizedBox(width: 8),
-                      Text(
-                        'To: ${delivery.deliveryLocation}',
-                        style: TextStyle(color: Colors.grey.shade700),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   @override
