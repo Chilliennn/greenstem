@@ -402,6 +402,71 @@ class LocalUserDatabaseService {
     _loadUsers();
   }
 
+  Future<void> cleanDuplicateEmails() async {
+    try {
+      final db = await database;
+
+      print('🔍 Starting duplicate email cleanup...');
+
+      final duplicates = await db.rawQuery('''
+      SELECT email, COUNT(*) as count 
+      FROM users 
+      GROUP BY email 
+      HAVING COUNT(*) > 1
+    ''');
+
+      print('🔍 Found ${duplicates.length} duplicate emails');
+
+      for (final duplicate in duplicates) {
+        final email = duplicate['email'] as String;
+        final count = duplicate['count'] as int;
+        print('Cleaning $count duplicates for email: $email');
+
+        final records = await db.query(
+          'users',
+          where: 'email = ?',
+          whereArgs: [email],
+          orderBy: 'created_at DESC', 
+        );
+
+
+        if (records.length > 1) {
+          for (int i = 1; i < records.length; i++) {
+            final record = records[i];
+            final userId = record['user_id'] as String;
+            await db.delete(
+              'users',
+              where: 'user_id = ?',
+              whereArgs: [userId],
+            );
+            print('🗑️ Deleted duplicate record: $userId');
+          }
+          print('✅ Kept latest record for email: $email');
+        }
+      }
+
+      print('✅ Duplicate cleanup completed');
+    } catch (e) {
+      print('❌ Error cleaning duplicates: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> printAllUsers() async {
+    try {
+      final db = await database;
+      final users = await db.query('users', orderBy: 'email, created_at');
+
+      print('📋 All users in database:');
+      for (final user in users) {
+        print(
+            '  - ID: ${user['user_id']}, Email: ${user['email']}, Username: ${user['username']}, Created: ${user['created_at']}');
+      }
+    } catch (e) {
+      print('❌ Error printing users: $e');
+    }
+  }
+
   Future<void> clearAll() async {
     final db = await database;
     await db.delete(_tableName);

@@ -12,6 +12,8 @@ abstract class RemoteUserDataSource {
 
   Future<UserModel> updateUser(UserModel user);
 
+  Future<void> updatePassword(String userId, String newPassword);
+
   Future<void> deleteUser(String userId);
 
   Future<UserModel?> login(String username, String password);
@@ -105,6 +107,15 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
       return _safeParseUserModel(response);
     } catch (e) {
       throw Exception('Failed to update profile on remote: $e');
+    }
+  }
+
+  @override
+  Future<void> updatePassword(String userId, String newPassword) async {
+    try {
+      await _client.from('user').update({'password': newPassword, 'updated_at': DateTime.now().toIso8601String()}).eq('user_id', userId);
+    } catch (e) {
+      throw Exception('Failed to update password on remote: $e');
     }
   }
 
