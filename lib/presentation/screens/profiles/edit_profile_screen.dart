@@ -1,117 +1,131 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../../core/services/network_service.dart';
-import '../../../data/datasources/local/local_user_database_service.dart';
-import '../../../data/datasources/remote/remote_user_datasource.dart';
-import '../../../data/repositories/user_repository_impl.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import '../../../core/constants/app_colors.dart';
 import '../../../domain/entities/user.dart';
-import '../../../domain/services/user_service.dart';
+import '../../providers/auth_provider.dart';
+import '../../widgets/custom_text_field.dart';
 
-class EditProfileScreen extends StatefulWidget {
+class EditProfileScreen extends ConsumerStatefulWidget {
   final User user;
 
-  const EditProfileScreen({super.key, required this.user});
+  const EditProfileScreen({
+    super.key,
+    required this.user,
+  });
 
   @override
-  State<EditProfileScreen> createState() => _EditProfileScreenState();
+  ConsumerState<EditProfileScreen> createState() => _EditProfileScreenState();
 }
 
-class _EditProfileScreenState extends State<EditProfileScreen> {
+class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _usernameController;
-  late final TextEditingController _emailController;
-  late final TextEditingController _phoneController;
-
-  late final UserService _userService;
-  late final UserRepositoryImpl _repository;
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneNoController = TextEditingController();
+  final _birthDateController = TextEditingController();
 
   bool _isLoading = false;
-  bool _isOnline = false;
   String? _selectedGender;
-  DateTime? _selectedBirthDate;
-  StreamSubscription<bool>? _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
-    _initializeControllers();
-    _initializeServices();
-    _checkConnectivity();
-    _listenToConnectivity();
+    _initializeFields();
   }
 
-  void _initializeControllers() {
-    _usernameController = TextEditingController(text: widget.user.username);
-    _emailController = TextEditingController(text: widget.user.email);
-    _phoneController = TextEditingController(text: widget.user.phoneNo);
+  void _initializeFields() {
+    _firstNameController.text = widget.user.firstName ?? '';
+    _lastNameController.text = widget.user.lastName ?? '';
+    _usernameController.text = widget.user.username ?? '';
+    _emailController.text = widget.user.email ?? '';
+    _phoneNoController.text = widget.user.phoneNo ?? '';
+    _birthDateController.text = widget.user.birthDate != null
+        ? DateFormat('dd/MM/yyyy').format(widget.user.birthDate!)
+        : '';
     _selectedGender = widget.user.gender;
-    _selectedBirthDate = widget.user.birthDate;
   }
 
-  void _initializeServices() {
-    final localDataSource = LocalUserDatabaseService();
-    final remoteDataSource = SupabaseUserDataSource();
-    _repository = UserRepositoryImpl(localDataSource, remoteDataSource);
-    _userService = UserService(_repository);
+  @override
+  void dispose() {
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _usernameController.dispose();
+    _emailController.dispose();
+    _phoneNoController.dispose();
+    _birthDateController.dispose();
+    super.dispose();
   }
 
-  Future<void> _checkConnectivity() async {
-    final isOnline = await NetworkService.hasConnection();
-    if (mounted) {
-      setState(() => _isOnline = isOnline);
-    }
-  }
-
-  void _listenToConnectivity() {
-    _connectivitySubscription =
-        NetworkService.connectionStream.listen((isConnected) {
-      if (mounted) {
-        setState(() => _isOnline = isConnected);
-      }
-    });
-  }
-
-  Future<void> _selectBirthDate() async {
+  Future<void> _selectDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedBirthDate ?? DateTime(1990),
+      initialDate: widget.user.birthDate ??
+          DateTime.now().subtract(const Duration(days: 6570)),
       firstDate: DateTime(1900),
       lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppColors.cyellow,
+              onPrimary: Colors.black,
+              surface: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
-    if (picked != null && picked != _selectedBirthDate) {
-      setState(() {
-        _selectedBirthDate = picked;
-      });
+    if (picked != null) {
+      _birthDateController.text = DateFormat('dd/MM/yyyy').format(picked);
     }
   }
 
-  Future<void> _saveProfile() async {
+  Future<void> _updateProfile() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+    });
 
     try {
-      await _userService.updateProfile(
-        widget.user.userId,
-        username: _usernameController.text.trim().isNotEmpty
-            ? _usernameController.text.trim()
-            : null,
-        email: _emailController.text.trim().isNotEmpty
-            ? _emailController.text.trim()
-            : null,
-        phoneNo: _phoneController.text.trim().isNotEmpty
-            ? _phoneController.text.trim()
-            : null,
-        birthDate: _selectedBirthDate,
+      final userService = ref.read(userServiceProvider);
+      final currentUser = ref.read(authProvider).user;
+
+      if (currentUser == null) {
+        throw Exception('User not found');
+      }
+
+      // Parse birth date
+      DateTime? birthDate;
+      if (_birthDateController.text.isNotEmpty) {
+        try {
+          birthDate = DateFormat('dd/MM/yyyy').parse(_birthDateController.text);
+        } catch (e) {
+          throw Exception('Invalid date format');
+        }
+      }
+
+      // Update user profile
+      await userService.updateProfile(
+        currentUser.userId,
+        username: _usernameController.text.trim(),
+        email: _emailController.text.trim(),
+        phoneNo: _phoneNoController.text.trim(),
+        birthDate: birthDate,
         gender: _selectedGender,
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
       );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_isOnline
-                ? 'Profile updated successfully!'
-                : 'Profile updated locally (will sync when online)'),
+          const SnackBar(
+            content: Text('Profile updated successfully!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -121,14 +135,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to update profiles: $e'),
+            content: Text('Failed to update profile: $e'),
             backgroundColor: Colors.red,
           ),
         );
       }
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -136,220 +152,283 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit Profile'),
-        backgroundColor: Colors.green.shade50,
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 8),
-            child: Chip(
-              label: Text(_isOnline ? 'Online' : 'Offline'),
-              backgroundColor: _isOnline ? Colors.green : Colors.orange,
-              labelStyle: const TextStyle(color: Colors.white, fontSize: 12),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        backgroundColor: AppColors.cblack,
+        appBar: AppBar(
+          backgroundColor: AppColors.cblack,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text(
+            'Edit Profile',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
             ),
           ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Profile Picture Section
-              Center(
-                child: Stack(
+          centerTitle: true,
+        ),
+        body: SingleChildScrollView(
+          child: Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.green.shade100,
-                        border:
-                            Border.all(color: Colors.green.shade300, width: 3),
+                    // First Name Field
+                    _buildFieldLabel('First Name'),
+                    const SizedBox(height: 8),
+                    CustomTextField(
+                      controller: _firstNameController,
+                      labelText: '',
+                      useOutlineBorder: true,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter first name';
+                        }
+                        if (value.length < 2) {
+                          return 'First name must be at least 2 characters';
+                        }
+                        return null;
+                      },
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Last Name Field
+                    _buildFieldLabel('Last Name'),
+                    const SizedBox(height: 8),
+                    CustomTextField(
+                      controller: _lastNameController,
+                      labelText: '',
+                      useOutlineBorder: true,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter last name';
+                        }
+                        if (value.length < 2) {
+                          return 'Last name must be at least 2 characters';
+                        }
+                        return null;
+                      },
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Username Field
+                    _buildFieldLabel('Username'),
+                    const SizedBox(height: 8),
+                    CustomTextField(
+                      controller: _usernameController,
+                      labelText: '',
+                      useOutlineBorder: true,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter username';
+                        }
+                        if (value.length < 3) {
+                          return 'Username must be at least 3 characters';
+                        }
+                        return null;
+                      },
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Email Field
+                    _buildFieldLabel('Email Address'),
+                    const SizedBox(height: 8),
+                    CustomTextField(
+                      controller: _emailController,
+                      labelText: '',
+                      keyboardType: TextInputType.emailAddress,
+                      useOutlineBorder: true,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter email';
+                        }
+                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                            .hasMatch(value)) {
+                          return 'Please enter a valid email';
+                        }
+                        return null;
+                      },
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Phone Field
+                    _buildFieldLabel('Phone No.'),
+                    const SizedBox(height: 8),
+                    CustomTextField(
+                      controller: _phoneNoController,
+                      labelText: '',
+                      keyboardType: TextInputType.phone,
+                      useOutlineBorder: true,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter phone number';
+                        }
+                        return null;
+                      },
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Birth Date Field
+                    _buildFieldLabel('Birth Date'),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: _selectDate,
+                      child: AbsorbPointer(
+                        child: CustomTextField(
+                          controller: _birthDateController,
+                          labelText: '',
+                          useOutlineBorder: true,
+                          suffixIcon: const Icon(
+                            Icons.calendar_today,
+                            color: Colors.grey,
+                            size: 20,
+                          ),
+                        ),
                       ),
-                      child: widget.user.profilePath != null
-                          ? ClipOval(
-                              child: Image.network(
-                                widget.user.profilePath!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Icon(
-                                  Icons.person,
-                                  size: 60,
-                                  color: Colors.green.shade600,
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Gender Field
+                    _buildFieldLabel('Gender'),
+                    const SizedBox(height: 8),
+                    _buildGenderRadioButtons(),
+
+                    const SizedBox(height: 32),
+
+                    // Save Button
+                    Container(
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: Colors.green,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: TextButton(
+                        onPressed: _isLoading ? null : _updateProfile,
+                        style: TextButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white),
+                                ),
+                              )
+                            : const Text(
+                                'Save',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                            )
-                          : Icon(
-                              Icons.person,
-                              size: 60,
-                              color: Colors.green.shade600,
-                            ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade600,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: IconButton(
-                          icon: const Icon(Icons.camera_alt,
-                              color: Colors.white, size: 20),
-                          onPressed: () {
-                            // TODO: Implement image picker
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content:
-                                      Text('Image picker not implemented yet')),
-                            );
-                          },
-                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-
-              const SizedBox(height: 32),
-
-              // Form Fields
-              TextFormField(
-                controller: _usernameController,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
-                  prefixIcon: Icon(Icons.person_outline),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter a username';
-                  }
-                  if (value.trim().length < 3) {
-                    return 'Username must be at least 3 characters';
-                  }
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  prefixIcon: Icon(Icons.email_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter your email';
-                  }
-                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                      .hasMatch(value.trim())) {
-                    return 'Please enter a valid email';
-                  }
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number (Optional)',
-                  prefixIcon: Icon(Icons.phone_outlined),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Birth Date
-              InkWell(
-                onTap: _selectBirthDate,
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Birth Date (Optional)',
-                    prefixIcon: Icon(Icons.calendar_today_outlined),
-                    border: OutlineInputBorder(),
-                  ),
-                  child: Text(
-                    _selectedBirthDate != null
-                        ? '${_selectedBirthDate!.day}/${_selectedBirthDate!.month}/${_selectedBirthDate!.year}'
-                        : 'Select birth date',
-                    style: TextStyle(
-                      color: _selectedBirthDate != null
-                          ? null
-                          : Colors.grey.shade600,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Gender
-              DropdownButtonFormField<String>(
-                value: _selectedGender,
-                decoration: const InputDecoration(
-                  labelText: 'Gender (Optional)',
-                  prefixIcon: Icon(Icons.person_outline),
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'Male', child: Text('Male')),
-                  DropdownMenuItem(value: 'Female', child: Text('Female')),
-                  DropdownMenuItem(value: 'Other', child: Text('Other')),
-                ],
-                onChanged: (value) => setState(() => _selectedGender = value),
-              ),
-
-              const SizedBox(height: 32),
-
-              // Save Button
-              ElevatedButton(
-                onPressed: _isLoading ? null : _saveProfile,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: Colors.green.shade600,
-                  foregroundColor: Colors.white,
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : const Text('Save Changes'),
-              ),
-            ],
+            ),
           ),
-        ),
+        ));
+  }
+
+  Widget _buildFieldLabel(String label) {
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        color: Colors.black87,
       ),
     );
   }
 
-  @override
-  void dispose() {
-    _usernameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _connectivitySubscription?.cancel();
-    _repository.dispose();
-    super.dispose();
+  Widget _buildGenderRadioButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildRadioOption('Male', 'Male'),
+        ),
+        const SizedBox(width: 20),
+        Expanded(
+          child: _buildRadioOption('Female', 'Female'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRadioOption(String value, String label) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedGender = value;
+        });
+      },
+      child: Row(
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: _selectedGender == value
+                    ? Colors.grey.shade800
+                    : Colors.grey.shade400,
+                width: 2,
+              ),
+              color: _selectedGender == value
+                  ? Colors.grey.shade800
+                  : Colors.transparent,
+            ),
+            child: _selectedGender == value
+                ? const Icon(
+                    Icons.check,
+                    size: 12,
+                    color: Colors.white,
+                  )
+                : null,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade700,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
