@@ -6,7 +6,7 @@ import '../../../data/repositories/delivery_repository_impl.dart';
 import '../../../data/datasources/local/local_delivery_database_service.dart';
 import '../../../data/datasources/remote/remote_delivery_datasource.dart';
 import '../../../core/services/network_service.dart';
-import '../profile/profile_screen.dart';
+import '../profiles/profile_screen.dart';
 
 class DeliveryDetailScreen extends StatefulWidget {
   final Delivery delivery;

@@ -4,12 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/services/network_service.dart';
-import '../../../domain/services/user_service.dart';
 import '../../../domain/params/sign_up_params.dart';
-import '../../../data/repositories/user_repository_impl.dart';
-import '../../../data/datasources/local/local_user_database_service.dart';
-import '../../../data/datasources/remote/remote_user_datasource.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
@@ -33,15 +28,13 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   final _phoneNoController = TextEditingController();
   final _birthDateController = TextEditingController();
 
-  late final UserService _userService;
-  late final UserRepositoryImpl _repository;
-
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
-  bool _isLoading = false;
-  bool _isOnline = false;
+  bool _isEmailValidating = false;
+  bool _isUsernameValidating = false;
   String _selectedCountryCode = '+60';
-  StreamSubscription<bool>? _connectivitySubscription;
+  String? _emailError;
+  String? _usernameError;
 
   final List<Map<String, dynamic>> _countryCodes = [
     {
@@ -91,40 +84,16 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeServices();
-    _checkConnectivity();
-    _listenToConnectivity();
-  }
-
-  void _initializeServices() {
-    final localDataSource = LocalUserDatabaseService();
-    final remoteDataSource = SupabaseUserDataSource();
-    _repository = UserRepositoryImpl(localDataSource, remoteDataSource);
-    _userService = UserService(_repository);
-  }
-
-  Future<void> _checkConnectivity() async {
-    final isOnline = await NetworkService.hasConnection();
-    if (mounted) {
-      setState(() => _isOnline = isOnline);
-    }
-  }
-
-  void _listenToConnectivity() {
-    _connectivitySubscription =
-        NetworkService.connectionStream.listen((isConnected) {
-      if (mounted) {
-        setState(() => _isOnline = isConnected);
-      }
-    });
   }
 
   Future<void> _selectDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now().subtract(const Duration(days: 6570)),
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
+      initialDate:
+          DateTime.now().subtract(const Duration(days: 6570)), // 18 years ago
+      firstDate:
+          DateTime.now().subtract(const Duration(days: 43800)), // 120 years ago
+      lastDate: DateTime.now(), // Cannot be future date
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -144,10 +113,111 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     }
   }
 
-  void _register() {
-    if (_formKey.currentState!.validate()) {
-      final authNotifier = ref.read(authProvider.notifier);
+  Future<bool> _checkEmailAvailability(String email) async {
+    try {
+      final userService = ref.read(userServiceProvider);
+      final isAvailable = await userService.isEmailAvailable(email);
+      return isAvailable;
+    } catch (e) {
+      print('Failed to check email availability: $e');
+      return true;
+    }
+  }
 
+  Future<bool> _checkUsernameAvailability(String username) async {
+    try {
+      final userService = ref.read(userServiceProvider);
+      final isAvailable = await userService.isUsernameAvailable(username);
+      return isAvailable;
+    } catch (e) {
+      print('Failed to check username availability: $e');
+      return true;
+    }
+  }
+
+  Future<void> _validateEmail(String email) async {
+    if (email.isEmpty) {
+      setState(() {
+        _emailError = null;
+        _isEmailValidating = false;
+      });
+      return;
+    }
+
+    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
+      setState(() {
+        _emailError = 'Invalid email format';
+        _isEmailValidating = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _emailError = null;
+      _isEmailValidating = true;
+    });
+
+    final isAvailable = await _checkEmailAvailability(email);
+    if (mounted) {
+      setState(() {
+        _isEmailValidating = false;
+        _emailError = isAvailable ? null : 'Email already exists';
+      });
+    }
+  }
+
+  Future<void> _validateUsername(String username) async {
+    if (username.isEmpty) {
+      setState(() {
+        _usernameError = null;
+        _isUsernameValidating = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isUsernameValidating = true;
+      _usernameError = null;
+    });
+
+    final isAvailable = await _checkUsernameAvailability(username);
+    if (mounted) {
+      setState(() {
+        _isUsernameValidating = false;
+        _usernameError = isAvailable ? null : 'Username already exists';
+      });
+    }
+  }
+
+  Future<void> _register() async {
+    if (_formKey.currentState!.validate()) {
+      final isEmailAvailable =
+          await _checkEmailAvailability(_emailController.text.trim());
+      if (!isEmailAvailable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Email already exists. Please use a different email.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final isUsernameAvailable =
+          await _checkUsernameAvailability(_usernameController.text.trim());
+      if (!isUsernameAvailable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Username already exists. Please choose a different username.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final authNotifier = ref.read(authProvider.notifier);
       final params = SignUpParams(
         firstName: _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim(),
@@ -170,6 +240,70 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
         (route) => false,
       );
     }
+  }
+
+  String? _validateBirthDate(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter your birth date';
+    }
+
+    try {
+      // Parse the date from dd/MM/yyyy format
+      final birthDate = DateFormat('dd/MM/yyyy').parse(value);
+      final now = DateTime.now();
+      final age = now.difference(birthDate).inDays / 365.25;
+
+      // Check if date is in the future
+      if (birthDate.isAfter(now)) {
+        return 'Birth date cannot be in the future';
+      }
+
+      // Check if age is over 120 years
+      if (age > 120) {
+        return 'Age cannot exceed 120 years';
+      }
+
+      // Check if age is under 13 years (minimum age requirement)
+      if (age < 13) {
+        return 'You must be at least 13 years old to register';
+      }
+
+      return null;
+    } catch (e) {
+      return 'Please enter a valid date (dd/MM/yyyy)';
+    }
+  }
+
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter your password';
+    }
+
+    if (value.length < 8) {
+      return 'Password must be at least 8 characters';
+    }
+
+    // Check for at least one uppercase letter
+    if (!RegExp(r'[A-Z]').hasMatch(value)) {
+      return 'Password must contain at least one uppercase letter';
+    }
+
+    // Check for at least one lowercase letter
+    if (!RegExp(r'[a-z]').hasMatch(value)) {
+      return 'Password must contain at least one lowercase letter';
+    }
+
+    // Check for at least one digit
+    if (!RegExp(r'[0-9]').hasMatch(value)) {
+      return 'Password must contain at least one number';
+    }
+
+    // Check for at least one special character
+    if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(value)) {
+      return 'Password must contain at least one special character (!@#\$%^&*(),.?":{}|<>)';
+    }
+
+    return null;
   }
 
   String? _validatePhoneNumber(String? value) {
@@ -351,6 +485,46 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                     labelText: 'Email',
                                     keyboardType: TextInputType.emailAddress,
                                     useOutlineBorder: true,
+                                    onChanged: (value) {
+                                      if (_emailError != null) {
+                                        setState(() {
+                                          _emailError = null;
+                                          _isEmailValidating = false;
+                                        });
+                                      }
+                                    },
+                                    onFieldSubmitted: (value) =>
+                                        _validateEmail(value),
+                                    onTap: () {
+                                      if (_emailController.text.isNotEmpty) {
+                                        _validateEmail(_emailController.text);
+                                      }
+                                    },
+                                    suffixIcon: _isEmailValidating
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(12),
+                                              child:
+                                                  const CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      color: AppColors.cyellow),
+                                            ))
+                                        : _emailError != null
+                                            ? const Icon(Icons.error,
+                                                color: Colors.red, size: 20)
+                                            : _emailController
+                                                        .text.isNotEmpty &&
+                                                    _emailError == null &&
+                                                    RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                                                        .hasMatch(
+                                                            _emailController
+                                                                .text)
+                                                ? const Icon(Icons.check_circle,
+                                                    color: Colors.green,
+                                                    size: 20)
+                                                : null,
                                     validator: (value) {
                                       if (value == null || value.isEmpty) {
                                         return 'Please enter email';
@@ -378,12 +552,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                           color: Colors.grey,
                                           size: 20,
                                         ),
-                                        validator: (value) {
-                                          if (value == null || value.isEmpty) {
-                                            return 'Please enter your birth date';
-                                          }
-                                          return null;
-                                        },
+                                        validator: _validateBirthDate,
                                       ),
                                     ),
                                   ),
@@ -464,12 +633,54 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                     controller: _usernameController,
                                     labelText: 'Username',
                                     useOutlineBorder: true,
+                                    onChanged: (value) {
+                                      if (_usernameError != null) {
+                                        setState(() {
+                                          _usernameError = null;
+                                          _isUsernameValidating = false;
+                                        });
+                                      }
+                                    },
+                                    onFieldSubmitted: (value) =>
+                                        _validateUsername(value),
+                                    onTap: () {
+                                      if (_usernameController.text.isNotEmpty) {
+                                        _validateUsername(
+                                            _usernameController.text);
+                                      }
+                                    },
+                                    suffixIcon: _isUsernameValidating
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: Padding(
+                                              padding: EdgeInsets.all(12.0),
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2),
+                                            ),
+                                          )
+                                        : _usernameError != null
+                                            ? const Icon(Icons.error,
+                                                color: Colors.red, size: 20)
+                                            : _usernameController
+                                                        .text.isNotEmpty &&
+                                                    _usernameError == null &&
+                                                    _usernameController
+                                                            .text.length >=
+                                                        3
+                                                ? const Icon(Icons.check,
+                                                    color: Colors.green,
+                                                    size: 20)
+                                                : null,
                                     validator: (value) {
                                       if (value == null || value.isEmpty) {
                                         return 'Please enter username';
                                       }
                                       if (value.length < 3) {
                                         return 'Username must be at least 3 characters';
+                                      }
+                                      if (_usernameError != null) {
+                                        return _usernameError;
                                       }
                                       return null;
                                     },
@@ -497,15 +708,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                         });
                                       },
                                     ),
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'Please enter your password';
-                                      }
-                                      if (value.length < 8) {
-                                        return 'Password must be at least 8 characters';
-                                      }
-                                      return null;
-                                    },
+                                    validator: _validatePassword,
                                   ),
                                   const SizedBox(height: 20),
 
@@ -610,8 +813,6 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     _lastNameController.dispose();
     _phoneNoController.dispose();
     _birthDateController.dispose();
-    _connectivitySubscription?.cancel();
-    _repository.dispose();
     super.dispose();
   }
 }

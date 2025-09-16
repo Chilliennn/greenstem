@@ -23,41 +23,6 @@ class UserService {
     return _repository.watchCurrentUser();
   }
 
-  // Authentication operations
-  Future<User?> login(String email, String password) async {
-    try {
-      if (email.isEmpty || password.isEmpty) {
-        throw Exception('Email and password are required');
-      }
-      return await _repository.login(email, password);
-    } catch (e) {
-      throw Exception('Login failed: $e');
-    }
-  }
-
-  Future<User> register(User user) async {
-    try {
-      // Validate profiles data
-      if (!user.isValidEmail) {
-        throw Exception('Invalid email format');
-      }
-      if (user.password == null || user.password!.length < 6) {
-        throw Exception('Password must be at least 6 characters');
-      }
-      return await _repository.register(user);
-    } catch (e) {
-      throw Exception('Registration failed: $e');
-    }
-  }
-
-  Future<void> logout() async {
-    try {
-      await _repository.logout();
-    } catch (e) {
-      throw Exception('Logout failed: $e');
-    }
-  }
-
   Future<User?> getCurrentUser() async {
     try {
       return await _repository.getCurrentUser();
@@ -169,4 +134,16 @@ class UserService {
   }
 
   Future<bool> hasNetworkConnection() => _repository.hasNetworkConnection();
+
+  // Profile image operations
+  Future<User> updateProfileImage(String userId, String imagePath) async {
+    try {
+      return await _repository.updateProfile(
+        userId,
+        profilePath: imagePath,
+      );
+    } catch (e) {
+      throw Exception('Failed to update profile image: $e');
+    }
+  }
 }

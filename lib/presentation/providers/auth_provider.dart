@@ -7,13 +7,23 @@ import '../../domain/params/sign_in_params.dart';
 import '../../domain/params/sign_up_params.dart';
 import '../../domain/usecases/sign_up_usecase.dart';
 import '../../domain/usecases/sign_in_usecase.dart';
+import '../../domain/services/user_service.dart';
 import '../states/auth_state.dart';
 import '../../core/services/auth_storage_service.dart';
 
-final authRepositoryProvider = Provider((ref) {
+final userRepositoryProvider = Provider((ref) {
   final localDataSource = LocalUserDatabaseService();
   final remoteDataSource = SupabaseUserDataSource();
-  final userRepository = UserRepositoryImpl(localDataSource, remoteDataSource);
+  return UserRepositoryImpl(localDataSource, remoteDataSource);
+});
+
+final userServiceProvider = Provider((ref) {
+  final userRepository = ref.read(userRepositoryProvider);
+  return UserService(userRepository);
+});
+
+final authRepositoryProvider = Provider((ref) {
+  final userRepository = ref.read(userRepositoryProvider);
   return AuthRepositoryImpl(userRepository);
 });
 

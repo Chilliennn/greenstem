@@ -342,26 +342,37 @@ class LocalUserDatabaseService {
   }
 
   Stream<UserModel?> watchUserById(String userId) async* {
+    _loadUsers(); // Initialize data
     await for (final users in _usersController.stream) {
       yield users.where((u) => u.userId == userId).firstOrNull;
     }
   }
 
   Stream<UserModel?> watchUserByEmail(String email) async* {
+    _loadUsers(); // Initialize data
     await for (final users in _usersController.stream) {
       yield users.where((u) => u.email == email).firstOrNull;
     }
   }
 
   Stream<UserModel?> watchCurrentUser() async* {
+    _loadUsers(); // Initialize data
     await for (final users in _usersController.stream) {
       yield users.where((u) => u.isCurrentUser).firstOrNull;
     }
   }
 
   Future<void> _loadUsers() async {
-    final users = await getAllUsers();
-    _usersController.add(users);
+    try {
+      final users = await getAllUsers();
+      print('📊 Loaded ${users.length} users from database');
+      print(
+          '📊 Current users: ${users.map((u) => '${u.username} (current: ${u.isCurrentUser})').join(', ')}');
+      _usersController.add(users);
+    } catch (e) {
+      print('❌ Error loading users: $e');
+      _usersController.addError(e);
+    }
   }
 
   // CRUD operations
@@ -423,10 +434,48 @@ class LocalUserDatabaseService {
     return UserModel.fromJson(result.first);
   }
 
+  Future<bool> isEmailExists(String email) async {
+    try {
+      final db = await database;
+      final result = await db.query(
+        _tableName,
+        where: 'email = ?',
+        whereArgs: [email],
+        limit: 1,
+      );
+      return result.isNotEmpty;
+    } catch (e) {
+      print('Error checking email existence: $e');
+      return false;
+    }
+  }
+
+  Future<bool> isUsernameExists(String username) async {
+    try {
+      final db = await database;
+      final result = await db.query(
+        _tableName,
+        where: 'username = ?',
+        whereArgs: [username],
+        limit: 1,
+      );
+      return result.isNotEmpty;
+    } catch (e) {
+      print('Error checking username existence: $e');
+      return false;
+    }
+  }
+
   Future<UserModel> insertUser(UserModel user) async {
     final db = await database;
-    await db.insert(_tableName, user.toJson(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    if (user.email != null && await isEmailExists(user.email!)) {
+      throw Exception('Email already exists in local database');
+    }
+
+    if (user.username != null && await isUsernameExists(user.username!)) {
+      throw Exception('Username already exists in local database');
+    }
+    await db.insert(_tableName, user.toJson());
 
     // Notify listeners
     _loadUsers();
@@ -529,8 +578,6 @@ class LocalUserDatabaseService {
   }
 
   Future<void> cleanDuplicateEmails() async {
-    final db = await database;
-
     // Get all users
     final users = await getAllUsers();
     final emailMap = <String, List<UserModel>>{};

@@ -10,7 +10,8 @@ class AuthRepositoryImpl implements AuthRepository {
   final UserRepository _userRepository;
 
   AuthRepositoryImpl(this._userRepository);
-
+  UserRepository get userRepository => _userRepository;
+  
   @override
   Future<User> signUp(SignUpParams params) async {
     // Parse birth date from dd/MM/yyyy format

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:greenstem/presentation/providers/auth_provider.dart';
 import 'package:greenstem/presentation/screens/auth/sign_in_screen.dart';
 import 'package:greenstem/presentation/screens/delivery_detail/delivery_detail_screen.dart';
-import 'package:greenstem/presentation/screens/profile/profile_screen.dart';
+import 'package:greenstem/presentation/screens/profiles/profile_screen.dart';
 import '../../../domain/entities/delivery.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/services/delivery_service.dart';
