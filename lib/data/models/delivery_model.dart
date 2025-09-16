@@ -77,7 +77,6 @@ class DeliveryModel {
     };
   }
 
-  // Convert to domain entity
   Delivery toEntity() {
     return Delivery(
       deliveryId: deliveryId,
@@ -95,7 +94,6 @@ class DeliveryModel {
     );
   }
 
-  // Create from domain entity
   factory DeliveryModel.fromEntity(Delivery entity,
       {bool? isSynced, bool? needsSync}) {
     return DeliveryModel(

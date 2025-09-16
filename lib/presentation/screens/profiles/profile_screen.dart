@@ -8,7 +8,7 @@ import '../../../domain/entities/user.dart';
 import '../../../domain/services/user_service.dart';
 import '../../../presentation/screens/auth/sign_in_screen.dart';
 import '../../../presentation/screens/profiles/change_password_screen.dart';
-import '../../../presentation/screens/profile/edit_profile_screen.dart';
+import '../../../presentation/screens/profiles/edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
