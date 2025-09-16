@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../domain/entities/delivery.dart';
+import 'package:greenstem/domain/entities/delivery.dart';
+import '../../../presentation/widgets/home/active_tab.dart';
+import '../../../presentation/widgets/home/history_tab.dart';
+import '../../../presentation/widgets/home/sliding_tab_switcher.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/services/delivery_service.dart';
 import '../../../domain/services/user_service.dart';
@@ -12,10 +15,7 @@ import '../../../data/datasources/local/local_user_database_service.dart';
 import '../../../data/datasources/remote/remote_delivery_datasource.dart';
 import '../../../data/datasources/remote/remote_user_datasource.dart';
 import '../../../core/services/network_service.dart';
-import '../delivery_detail/delivery_detail_screen.dart';
-import '../profile/profile_screen.dart';
-import '../auth/sign_in_screen.dart';
-import '../../providers/auth_provider.dart';
+import '../profiles/profile_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -34,6 +34,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   User? _currentUser;
   StreamSubscription<bool>? _connectivitySubscription;
   StreamSubscription<User?>? _userSubscription;
+  bool isActiveTab = true;
 
   @override
   void initState() {
@@ -42,6 +43,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _checkConnectivity();
     _listenToConnectivity();
     _loadCurrentUser();
+
+    // Debug data synchronization
+    _debugDataSync();
+  }
+
+  Future<void> _debugDataSync() async {
+    print('DEBUG: Checking data synchronization...');
+
+    try {
+      // Check local data
+      final localDeliveries = await _deliveryRepository.getCachedDeliveries();
+      print('Local deliveries count: ${localDeliveries.length}');
+
+      if (await NetworkService.hasConnection()) {
+        print('Network is available, checking remote data...');
+
+        // Try to fetch from remote
+        final remoteDataSource = SupabaseDeliveryDataSource();
+        final remoteDeliveries = await remoteDataSource.getAllDeliveries();
+        print('Remote deliveries count: ${remoteDeliveries.length}');
+
+        // Force a sync
+        print('Forcing sync from remote...');
+        await _deliveryRepository.syncFromRemote();
+
+        // Check local again
+        final localAfterSync = await _deliveryRepository.getCachedDeliveries();
+        print('Local deliveries after sync: ${localAfterSync.length}');
+      } else {
+        print('No network connection');
+      }
+    } catch (e) {
+      print('Debug sync error: $e');
+    }
   }
 
   void _initializeServices() {
@@ -64,6 +99,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isOnline = await NetworkService.hasConnection();
     if (mounted) {
       setState(() => _isOnline = isOnline);
+
+      // Trigger sync when we come online
+      if (isOnline) {
+        _syncAllData();
+      }
     }
   }
 
@@ -72,8 +112,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         NetworkService.connectionStream.listen((isConnected) {
       if (mounted) {
         setState(() => _isOnline = isConnected);
+
+        // Trigger sync when connectivity changes to online
+        if (isConnected) {
+          _syncAllData();
+        }
       }
     });
+  }
+
+  Future<void> _syncAllData() async {
+    try {
+      print('Starting data synchronization...');
+      await _deliveryRepository.syncFromRemote();
+      await _userRepository.syncFromRemote();
+      print('Data synchronization completed');
+    } catch (e) {
+      print('Sync error: $e');
+    }
   }
 
   void _loadCurrentUser() {
@@ -86,559 +142,138 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
-  Future<void> _acceptDelivery(Delivery delivery) async {
-    try {
-      final updatedDelivery = delivery.copyWith(
-        status: 'awaiting',
-        updatedAt: DateTime.now(),
-      );
-
-      await _deliveryService.updateDelivery(updatedDelivery);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_isOnline
-                ? 'Delivery accepted'
-                : 'Delivery accepted (will sync when online)'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error accepting delivery: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _logout() async {
-    try {
-      // Use auth provider's logout method to properly clear auth state
-      final authNotifier = ref.read(authProvider.notifier);
-      await authNotifier.signOut();
-
-      if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => const SignInScreen()),
-          (route) => false,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Logout failed: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  void _showLogoutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _logout();
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Delivery Dashboard'),
-        backgroundColor: Colors.green.shade50,
+        title: const Text(
+          'Home',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        backgroundColor: const Color(0xFF111111),
         actions: [
-          // Network Status
-          Container(
-            margin: const EdgeInsets.only(right: 8),
-            child: Chip(
-              label: Text(_isOnline ? 'Online' : 'Offline'),
-              backgroundColor: _isOnline ? Colors.green : Colors.orange,
-              labelStyle: const TextStyle(color: Colors.white, fontSize: 12),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          // Network status indicator
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Icon(
+              _isOnline ? Icons.cloud_done : Icons.cloud_off,
+              color: _isOnline ? Colors.green : Colors.red,
+              size: 20,
             ),
           ),
-          // Profile Button
+          // Manual sync button
           IconButton(
-            icon: const Icon(Icons.person),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ProfileScreen(),
-                ),
-              );
-            },
+            onPressed: _isOnline ? () => _syncAllData() : null,
+            icon: const Icon(Icons.sync, color: Colors.white),
           ),
-          // Logout Button
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _showLogoutDialog,
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const ProfileScreen()),
+                );
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: CircleAvatar(
+                radius: 20,
+                backgroundColor: Colors.grey[300],
+                child: _currentUser?.username != null
+                    ? Text(
+                        _currentUser!.username![0].toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : const Icon(Icons.person, color: Colors.black),
+              ),
+            ),
           ),
         ],
       ),
-      body: StreamBuilder<List<Delivery>>(
-        stream: _deliveryService.watchAllDeliveries(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error, size: 64, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text('Error: ${snapshot.error}'),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _checkConnectivity,
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            );
-          }
+      backgroundColor: const Color(0xFF111111),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            // Tab switcher
+            SlidingTabSwitcher(
+              tabs: const ["Active", "History"],
+              onTabSelected: (index) {
+                setState(() {
+                  isActiveTab = index == 0;
+                });
+              },
+            ),
+            const SizedBox(height: 20),
 
-          if (snapshot.connectionState == ConnectionState.waiting &&
-              !snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
+            // Content area using your custom widgets
+            Expanded(
+              child: StreamBuilder<List<Delivery>>(
+                stream: _deliveryService.watchAllDeliveries(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-          final allDeliveries = snapshot.data ?? [];
-          final incomingDeliveries = allDeliveries
-              .where((d) => d.status?.toLowerCase() == 'pending')
-              .toList();
-          final acceptedDeliveries = allDeliveries
-              .where((d) => ['awaiting', 'picked up', 'en route', 'delivered']
-                  .contains(d.status?.toLowerCase()))
-              .toList();
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Welcome Message
-                if (_currentUser != null) ...[
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            backgroundColor: Colors.green.shade100,
-                            child: Icon(
-                              Icons.person,
-                              color: Colors.green.shade700,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Welcome back, ${_currentUser!.displayName}!',
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                Text(
-                                  'Ready to manage your deliveries?',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
-
-                // Accepted Deliveries Section
-                if (acceptedDeliveries.isNotEmpty) ...[
-                  Row(
-                    children: [
-                      Icon(Icons.assignment_turned_in,
-                          color: Colors.green.shade700),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Your Active Deliveries',
-                        style:
-                            Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green.shade700,
-                                ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  ...acceptedDeliveries
-                      .map((delivery) => _buildAcceptedDeliveryCard(delivery)),
-                  const SizedBox(height: 32),
-                ],
-
-                // Incoming Deliveries Section
-                Row(
-                  children: [
-                    Icon(Icons.inbox, color: Colors.blue.shade700),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Incoming Deliveries',
-                      style:
-                          Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue.shade700,
-                              ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                if (incomingDeliveries.isEmpty)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
+                  if (snapshot.hasError) {
+                    return Center(
                       child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            Icons.inbox,
-                            size: 64,
-                            color: Colors.grey.shade400,
-                          ),
+                          const Icon(Icons.error, size: 64, color: Colors.red),
                           const SizedBox(height: 16),
                           Text(
-                            'No incoming deliveries',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey.shade600,
-                            ),
+                            'Error: ${snapshot.error}',
+                            style: const TextStyle(color: Colors.white),
+                            textAlign: TextAlign.center,
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'New delivery requests will appear here',
-                            style: TextStyle(color: Colors.grey.shade500),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () {
+                              _checkConnectivity();
+                              if (_isOnline) _syncAllData();
+                            },
+                            child: const Text('Retry'),
                           ),
                         ],
                       ),
-                    ),
-                  )
-                else
-                  ...incomingDeliveries
-                      .map((delivery) => _buildIncomingDeliveryCard(delivery)),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
+                    );
+                  }
 
-  Widget _buildAcceptedDeliveryCard(Delivery delivery) {
-    Color statusColor;
-    IconData statusIcon;
+                  final deliveries = snapshot.data ?? [];
 
-    switch (delivery.status?.toLowerCase()) {
-      case 'awaiting':
-        statusColor = Colors.orange;
-        statusIcon = Icons.schedule;
-        break;
-      case 'picked up':
-        statusColor = Colors.blue;
-        statusIcon = Icons.local_shipping;
-        break;
-      case 'en route':
-        statusColor = Colors.purple;
-        statusIcon = Icons.navigation;
-        break;
-      case 'delivered':
-        statusColor = Colors.green;
-        statusIcon = Icons.check_circle;
-        break;
-      default:
-        statusColor = Colors.grey;
-        statusIcon = Icons.help;
-    }
+                  // Debug output
+                  print(
+                      'StreamBuilder received ${deliveries.length} deliveries');
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 3,
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DeliveryDetailScreen(
-                delivery: delivery,
-                onDeliveryUpdated: (updatedDelivery) {
-                  // Delivery will be updated through the stream
+                  // Filter deliveries based on tab
+                  final filteredDeliveries = isActiveTab
+                      ? deliveries
+                          .where((d) =>
+                              d.status?.toLowerCase() != 'delivered' &&
+                              d.status?.toLowerCase() != 'cancelled')
+                          .toList()
+                      : deliveries
+                          .where((d) =>
+                              d.status?.toLowerCase() == 'delivered' ||
+                              d.status?.toLowerCase() == 'cancelled')
+                          .toList();
+
+                  // Use your custom tab widgets
+                  return isActiveTab
+                      ? ActiveTab(deliveries: filteredDeliveries)
+                      : HistoryTab(deliveries: filteredDeliveries);
                 },
               ),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(statusIcon, color: statusColor, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Delivery ${delivery.deliveryId.substring(0, 8)}...',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: statusColor,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            delivery.status?.toUpperCase() ?? 'UNKNOWN',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.arrow_forward_ios, size: 16),
-                ],
-              ),
-              if (delivery.pickupLocation != null ||
-                  delivery.deliveryLocation != null) ...[
-                const SizedBox(height: 12),
-                const Divider(),
-                const SizedBox(height: 8),
-                if (delivery.pickupLocation != null) ...[
-                  Row(
-                    children: [
-                      Icon(Icons.location_on,
-                          size: 16, color: Colors.grey.shade600),
-                      const SizedBox(width: 8),
-                      Text(
-                        'From: ${delivery.pickupLocation}',
-                        style: TextStyle(color: Colors.grey.shade700),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                ],
-                if (delivery.deliveryLocation != null) ...[
-                  Row(
-                    children: [
-                      Icon(Icons.flag, size: 16, color: Colors.grey.shade600),
-                      const SizedBox(width: 8),
-                      Text(
-                        'To: ${delivery.deliveryLocation}',
-                        style: TextStyle(color: Colors.grey.shade700),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildIncomingDeliveryCard(Delivery delivery) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child:
-                      Icon(Icons.inbox, color: Colors.blue.shade700, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Delivery ${delivery.deliveryId.substring(0, 8)}...',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade600,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Text(
-                          'PENDING',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (delivery.pickupLocation != null ||
-                delivery.deliveryLocation != null) ...[
-              const SizedBox(height: 12),
-              if (delivery.pickupLocation != null) ...[
-                Row(
-                  children: [
-                    Icon(Icons.location_on,
-                        size: 16, color: Colors.grey.shade600),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'From: ${delivery.pickupLocation}',
-                        style: TextStyle(color: Colors.grey.shade700),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-              ],
-              if (delivery.deliveryLocation != null) ...[
-                Row(
-                  children: [
-                    Icon(Icons.flag, size: 16, color: Colors.grey.shade600),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'To: ${delivery.deliveryLocation}',
-                        style: TextStyle(color: Colors.grey.shade700),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-              ],
-            ],
-            if (delivery.dueDatetime != null) ...[
-              Row(
-                children: [
-                  Icon(Icons.schedule, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Due: ${_formatDateTime(delivery.dueDatetime!)}',
-                    style: TextStyle(color: Colors.grey.shade700),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => DeliveryDetailScreen(
-                            delivery: delivery,
-                            onDeliveryUpdated: (updatedDelivery) {
-                              // Delivery will be updated through the stream
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                    child: const Text('View Details'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _acceptDelivery(delivery),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: const Text('Accept'),
-                  ),
-                ),
-              ],
             ),
           ],
         ),
       ),
     );
-  }
-
-  String _formatDateTime(DateTime dateTime) {
-    return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
   @override

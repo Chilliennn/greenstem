@@ -27,7 +27,7 @@ class UserService {
     try {
       return await _repository.getCurrentUser();
     } catch (e) {
-      throw Exception('Failed to get current profile: $e');
+      throw Exception('Failed to get current profiles: $e');
     }
   }
 
@@ -36,7 +36,7 @@ class UserService {
     try {
       return await _repository.createUser(user);
     } catch (e) {
-      throw Exception('Failed to create profile: $e');
+      throw Exception('Failed to create profiles: $e');
     }
   }
 
@@ -44,7 +44,7 @@ class UserService {
     try {
       return await _repository.updateUser(user);
     } catch (e) {
-      throw Exception('Failed to update profile: $e');
+      throw Exception('Failed to update profiles: $e');
     }
   }
 
@@ -52,7 +52,7 @@ class UserService {
     try {
       await _repository.deleteUser(userId);
     } catch (e) {
-      throw Exception('Failed to delete profile: $e');
+      throw Exception('Failed to delete profiles: $e');
     }
   }
 
@@ -86,7 +86,7 @@ class UserService {
         lastName: lastName,
       );
     } catch (e) {
-      throw Exception('Failed to update profile: $e');
+      throw Exception('Failed to update profiles: $e');
     }
   }
 

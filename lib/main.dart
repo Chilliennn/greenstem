@@ -49,7 +49,7 @@ Future<void> main() async {
   // } catch (e) {
   //   print('Error cleaning duplicates: $e');
   // }
-  
+
   runApp(const ProviderScope(child: MyApp()));
 }
 

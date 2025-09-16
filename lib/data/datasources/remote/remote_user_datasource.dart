@@ -55,7 +55,7 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
 
       return response != null ? _safeParseUserModel(response) : null;
     } catch (e) {
-      throw Exception('Failed to fetch profile from remote: $e');
+      throw Exception('Failed to fetch profiles from remote: $e');
     }
   }
 
@@ -82,7 +82,7 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
 
       return response != null ? _safeParseUserModel(response) : null;
     } catch (e) {
-      throw Exception('Failed to fetch profile by email from remote: $e');
+      throw Exception('Failed to fetch profiles by email from remote: $e');
     }
   }
 
@@ -101,7 +101,7 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
 
       return _safeParseUserModel(response);
     } catch (e) {
-      throw Exception('Failed to create profile on remote: $e');
+      throw Exception('Failed to create profiles on remote: $e');
     }
   }
 
@@ -124,7 +124,7 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
 
       return _safeParseUserModel(response);
     } catch (e) {
-      throw Exception('Failed to update profile on remote: $e');
+      throw Exception('Failed to update profiles on remote: $e');
     }
   }
 
@@ -145,7 +145,7 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
     try {
       await _client.from('user').delete().eq('user_id', userId);
     } catch (e) {
-      throw Exception('Failed to delete profile on remote: $e');
+      throw Exception('Failed to delete profiles on remote: $e');
     }
   }
 
@@ -230,7 +230,7 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
         isCurrentUser: false, // Will be set locally
       );
     } catch (e) {
-      throw Exception('Failed to parse profile model: $e');
+      throw Exception('Failed to parse profiles model: $e');
     }
   }
 }

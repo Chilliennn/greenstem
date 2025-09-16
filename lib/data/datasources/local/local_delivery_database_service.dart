@@ -24,7 +24,7 @@ class LocalDeliveryDatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // Increment version for sync fields
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -45,14 +45,24 @@ class LocalDeliveryDatabaseService {
         proof_img_path TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        is_synced INTEGER NOT NULL DEFAULT 0,
-        needs_sync INTEGER NOT NULL DEFAULT 1
+        is_synced INTEGER DEFAULT 0,
+        needs_sync INTEGER DEFAULT 1
       )
     ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Handle database migrations here
+    if (oldVersion < 2) {
+      // Add sync fields if they don't exist
+      try {
+        await db.execute(
+            'ALTER TABLE $_tableName ADD COLUMN is_synced INTEGER DEFAULT 0');
+        await db.execute(
+            'ALTER TABLE $_tableName ADD COLUMN needs_sync INTEGER DEFAULT 1');
+      } catch (e) {
+        print('Sync columns might already exist: $e');
+      }
+    }
   }
 
   // Stream-based operations
@@ -103,7 +113,8 @@ class LocalDeliveryDatabaseService {
 
   Future<DeliveryModel> insertDelivery(DeliveryModel delivery) async {
     final db = await database;
-    await db.insert(_tableName, delivery.toJson());
+    await db.insert(_tableName, delivery.toJson(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
 
     // Notify listeners
     _loadDeliveries();
@@ -156,7 +167,6 @@ class LocalDeliveryDatabaseService {
       {
         'is_synced': 1,
         'needs_sync': 0,
-        'updated_at': DateTime.now().toIso8601String(),
       },
       where: 'delivery_id = ?',
       whereArgs: [deliveryId],
@@ -174,20 +184,11 @@ class LocalDeliveryDatabaseService {
   Future<void> clearAllAndRecreate() async {
     try {
       final db = await database;
-
-      // Drop the table
-      await db.execute('DROP TABLE IF EXISTS $_tableName');
-
-      // Recreate it
-      await _onCreate(db, 1);
-
-      // Notify listeners
+      await db.delete(_tableName);
       _loadDeliveries();
-
       print('Database cleared and recreated successfully');
     } catch (e) {
-      print('Error clearing and recreating database: $e');
-      rethrow;
+      print('Error clearing database: $e');
     }
   }
 
