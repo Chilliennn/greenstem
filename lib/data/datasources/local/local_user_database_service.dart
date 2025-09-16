@@ -365,12 +365,12 @@ class LocalUserDatabaseService {
   Future<void> _loadUsers() async {
     try {
       final users = await getAllUsers();
-      print('📊 Loaded ${users.length} users from database');
+      print('Loaded ${users.length} users from database');
       print(
-          '📊 Current users: ${users.map((u) => '${u.username} (current: ${u.isCurrentUser})').join(', ')}');
+          'Current users: ${users.map((u) => '${u.username} (current: ${u.isCurrentUser})').join(', ')}');
       _usersController.add(users);
     } catch (e) {
-      print('❌ Error loading users: $e');
+      print('Error loading users: $e');
       _usersController.addError(e);
     }
   }
