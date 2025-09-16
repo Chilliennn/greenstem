@@ -29,7 +29,7 @@ class UserRepositoryImpl implements UserRepository {
       try {
         await syncFromRemote();
       } catch (e) {
-        print('Initial profile sync failed: $e');
+        print('Initial profiles sync failed: $e');
       }
     }
   }
@@ -40,7 +40,7 @@ class UserRepositoryImpl implements UserRepository {
         await syncToRemote();
         await syncFromRemote();
       } catch (e) {
-        print('Background profile sync failed: $e');
+        print('Background profiles sync failed: $e');
       }
     }
   }
@@ -84,7 +84,7 @@ class UserRepositoryImpl implements UserRepository {
         try {
           userModel = await _remoteDataSource.login(username, password);
           if (userModel != null) {
-            // Save to local database and set as current profile
+            // Save to local database and set as current profiles
             final localModel = userModel.copyWith(
               isSynced: true,
               needsSync: false,
@@ -140,7 +140,7 @@ class UserRepositoryImpl implements UserRepository {
 
       return savedModel.toEntity();
     } catch (e) {
-      throw Exception('Failed to register profile: $e');
+      throw Exception('Failed to register profiles: $e');
     }
   }
 
@@ -155,7 +155,7 @@ class UserRepositoryImpl implements UserRepository {
         }
       }
 
-      // Clear local current profile
+      // Clear local current profiles
       await _localDataSource.clearCurrentUser();
     } catch (e) {
       throw Exception('Logout failed: $e');
@@ -168,7 +168,7 @@ class UserRepositoryImpl implements UserRepository {
       final userModel = await _localDataSource.getCurrentUser();
       return userModel?.toEntity().toPublicUser();
     } catch (e) {
-      throw Exception('Failed to get current profile: $e');
+      throw Exception('Failed to get current profiles: $e');
     }
   }
 
@@ -196,7 +196,7 @@ class UserRepositoryImpl implements UserRepository {
 
       return savedModel.toEntity();
     } catch (e) {
-      throw Exception('Failed to create profile: $e');
+      throw Exception('Failed to create profiles: $e');
     }
   }
 
@@ -219,7 +219,7 @@ class UserRepositoryImpl implements UserRepository {
 
       return savedModel.toEntity();
     } catch (e) {
-      throw Exception('Failed to update profile: $e');
+      throw Exception('Failed to update profiles: $e');
     }
   }
 
@@ -234,11 +234,11 @@ class UserRepositoryImpl implements UserRepository {
         try {
           await _remoteDataSource.deleteUser(userId);
         } catch (e) {
-          print('Failed to delete profile from remote: $e');
+          print('Failed to delete profiles from remote: $e');
         }
       }
     } catch (e) {
-      throw Exception('Failed to delete profile: $e');
+      throw Exception('Failed to delete profiles: $e');
     }
   }
 
@@ -277,7 +277,7 @@ class UserRepositoryImpl implements UserRepository {
 
       return savedModel.toEntity();
     } catch (e) {
-      throw Exception('Failed to update profile: $e');
+      throw Exception('Failed to update profiles: $e');
     }
   }
 
@@ -321,7 +321,7 @@ class UserRepositoryImpl implements UserRepository {
 
       for (final localUser in unsyncedUsers) {
         try {
-          // Check if profile exists on remote
+          // Check if profiles exists on remote
           final remoteUser = await _remoteDataSource.getUserById(
             localUser.userId,
           );
@@ -341,7 +341,7 @@ class UserRepositoryImpl implements UserRepository {
           // Mark as synced
           await _localDataSource.markAsSynced(localUser.userId);
         } catch (e) {
-          print('Failed to sync profile ${localUser.userId}: $e');
+          print('Failed to sync profiles ${localUser.userId}: $e');
         }
       }
     } catch (e) {
@@ -362,7 +362,7 @@ class UserRepositoryImpl implements UserRepository {
         );
 
         if (localUser == null) {
-          // New profile from remote
+          // New profiles from remote
           final syncedModel = remoteUser.copyWith(
             isSynced: true,
             needsSync: false,
