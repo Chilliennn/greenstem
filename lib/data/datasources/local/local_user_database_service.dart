@@ -337,8 +337,6 @@ class LocalUserDatabaseService {
   }
 
   Future<UserModel> insertOrUpdateUser(UserModel user) async {
-
-
     // Check if user already exists
     final existingUser = await getUserById(user.userId);
 
