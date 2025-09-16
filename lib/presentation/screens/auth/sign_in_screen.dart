@@ -1,8 +1,6 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/services/network_service.dart';
 import '../../../domain/params/sign_in_params.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/custom_button.dart';
@@ -24,15 +22,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _passwordController = TextEditingController();
 
   bool _isPasswordVisible = false;
-  bool _isOnline = false;
   bool _rememberMe = false;
-  StreamSubscription<bool>? _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
-    _checkConnectivity();
-    _listenToConnectivity();
     _loadSavedCredentials();
   }
 
@@ -48,22 +42,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           _usernameController.text = savedUsername;
           _rememberMe = rememberMeStatus;
         });
-      }
-    });
-  }
-
-  Future<void> _checkConnectivity() async {
-    final isOnline = await NetworkService.hasConnection();
-    if (mounted) {
-      setState(() => _isOnline = isOnline);
-    }
-  }
-
-  void _listenToConnectivity() {
-    _connectivitySubscription =
-        NetworkService.connectionStream.listen((isConnected) {
-      if (mounted) {
-        setState(() => _isOnline = isConnected);
       }
     });
   }
@@ -356,7 +334,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
-    _connectivitySubscription?.cancel();
     super.dispose();
   }
 }

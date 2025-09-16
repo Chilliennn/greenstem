@@ -8,6 +8,8 @@ abstract class RemoteUserDataSource {
 
   Future<UserModel?> getUserByEmail(String email);
 
+  Future<UserModel?> getUserByUsername(String username);
+
   Future<UserModel> createUser(UserModel user);
 
   Future<UserModel> updateUser(UserModel user);
@@ -58,6 +60,21 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
   }
 
   @override
+  Future<UserModel?> getUserByUsername(String username) async {
+    try {
+      final response = await _client
+          .from('user')
+          .select()
+          .eq('username', username)
+          .maybeSingle();
+
+      return response != null ? _safeParseUserModel(response) : null;
+    } catch (e) {
+      throw Exception('Failed to fetch user by username from remote: $e');
+    }
+  }
+
+  @override
   Future<UserModel?> getUserByEmail(String email) async {
     try {
       final response =
@@ -72,6 +89,7 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
   @override
   Future<UserModel> createUser(UserModel user) async {
     try {
+
       final data = user.toJson();
       // Remove local-only fields
       data.remove('is_synced');
@@ -113,7 +131,10 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
   @override
   Future<void> updatePassword(String userId, String newPassword) async {
     try {
-      await _client.from('user').update({'password': newPassword, 'updated_at': DateTime.now().toIso8601String()}).eq('user_id', userId);
+      await _client.from('user').update({
+        'password': newPassword,
+        'updated_at': DateTime.now().toIso8601String()
+      }).eq('user_id', userId);
     } catch (e) {
       throw Exception('Failed to update password on remote: $e');
     }
@@ -149,12 +170,21 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
   @override
   Future<UserModel> register(UserModel user) async {
     try {
-      // Check if email already exists
-      final existingUser = await getUserByEmail(user.email!);
-      if (existingUser != null) {
-        throw Exception('Email already exists');
+
+      if (user.email != null) {
+        final existingUserByEmail = await getUserByEmail(user.email!);
+        if (existingUserByEmail != null) {
+          throw Exception('Email already exists');
+        }
       }
 
+      if (user.username != null) {
+        final existingUserByUsername = await getUserByUsername(user.username!);
+        if (existingUserByUsername != null) {
+          throw Exception('Username already exists');
+        }
+      }
+      
       return await createUser(user);
     } catch (e) {
       throw Exception('Registration failed: $e');

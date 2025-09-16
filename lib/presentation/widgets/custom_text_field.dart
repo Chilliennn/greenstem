@@ -11,7 +11,10 @@ class CustomTextField extends StatelessWidget {
   final Widget? suffixIcon;
   final List<TextInputFormatter>? inputFormatters;
   final String? Function(String?)? validator;
-  final bool useOutlineBorder; 
+  final bool useOutlineBorder;
+  final void Function(String)? onChanged;
+  final void Function(String)? onFieldSubmitted;
+  final VoidCallback? onTap;
 
   const CustomTextField({
     Key? key,
@@ -22,7 +25,10 @@ class CustomTextField extends StatelessWidget {
     this.suffixIcon,
     this.inputFormatters,
     this.validator,
-    this.useOutlineBorder = false, 
+    this.useOutlineBorder = false,
+    this.onChanged,
+    this.onFieldSubmitted,
+    this.onTap,
   }) : super(key: key);
 
   @override
@@ -33,7 +39,12 @@ class CustomTextField extends StatelessWidget {
       obscureText: obscureText,
       inputFormatters: inputFormatters,
       validator: validator,
-      decoration: useOutlineBorder ? _buildOutlineDecoration() : _buildUnderlineDecoration(),
+      onChanged: onChanged,
+      onFieldSubmitted: onFieldSubmitted,
+      onTap: onTap,
+      decoration: useOutlineBorder
+          ? _buildOutlineDecoration()
+          : _buildUnderlineDecoration(),
     );
   }
 

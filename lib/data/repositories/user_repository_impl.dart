@@ -117,6 +117,15 @@ class UserRepositoryImpl implements UserRepository {
   @override
   Future<User> register(User user) async {
     try {
+      if (user.email != null &&
+          await _localDataSource.isEmailExists(user.email!)) {
+        throw Exception('Email already exists');
+      }
+
+      if (user.username != null &&
+          await _localDataSource.isUsernameExists(user.username!)) {
+        throw Exception('Username already exists');
+      }
       final userId = const Uuid().v4();
       final userWithId = user.copyWith(
         userId: userId,
