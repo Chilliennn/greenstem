@@ -41,6 +41,9 @@ class EmailService {
   /// Send actual email using Supabase Edge Function
   static Future<void> _sendActualEmail(String email, String code) async {
     try {
+      print('🔄 Attempting to send email to: $email');
+      print('📧 Verification code: $code');
+      
       final response = await _client.functions.invoke(
         'send-verification-email',
         body: {
@@ -50,18 +53,25 @@ class EmailService {
         },
       );
 
+      print('📊 Edge Function response status: ${response.status}');
+      print(' Edge Function response data: ${response.data}');
+
       if (response.status != 200) {
-        throw Exception('Failed to send email: ${response.data}');
+        throw Exception('Edge Function failed with status ${response.status}: ${response.data}');
       }
 
       print('✅ Verification email sent successfully to $email');
     } catch (e) {
-      // Fallback to console logging for development
-      print('⚠️ Email sending failed, using console fallback: $e');
-      print('=== EMAIL SENT (FALLBACK) ===');
+      print('❌ Email sending failed: $e');
+      
+      // For development, show the verification code in console
+      print('=== DEVELOPMENT FALLBACK ===');
       print('To: $email');
       print('Verification Code: $code');
-      print('==============================');
+      print('============================');
+      
+      // Re-throw the exception so the calling code knows it failed
+      throw Exception('Failed to send email: $e');
     }
   }
 
@@ -111,9 +121,9 @@ class EmailService {
           .from('user')
           .select('email')
           .eq('email', email)
-          .maybeSingle();
+          .limit(1);
 
-      return response != null;
+      return response.isNotEmpty;
     } catch (e) {
       throw Exception('Failed to check user existence: $e');
     }

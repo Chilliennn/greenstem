@@ -423,7 +423,7 @@ class UserRepositoryImpl implements UserRepository {
       // Try to sync immediately if connected
       if (await hasNetworkConnection()) {
         try {
-          await _remoteDataSource.updateUser(updatedModel);
+          await _remoteDataSource.updatePassword(userModel.userId, newPassword);
           await _localDataSource.markAsSynced(userModel.userId);
         } catch (e) {
           print('Failed to sync password reset to remote: $e');
