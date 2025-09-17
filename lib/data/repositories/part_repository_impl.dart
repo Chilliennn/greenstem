@@ -5,41 +5,102 @@ import '../datasources/local/local_part_database_service.dart';
 import '../datasources/remote/remote_part_datasource.dart';
 import '../models/part_model.dart';
 import '../../core/services/network_service.dart';
+import 'package:uuid/uuid.dart';
 
 class PartRepositoryImpl implements PartRepository {
   final LocalPartDatabaseService _localDataSource;
   final RemotePartDataSource _remoteDataSource;
   Timer? _syncTimer;
+  StreamSubscription? _remoteSubscription;
+  StreamSubscription? _localSubscription;
 
   PartRepositoryImpl(this._localDataSource, this._remoteDataSource) {
     _initPeriodicSync();
     _initInitialSync();
+    _initBidirectionalSync();
   }
 
   void _initPeriodicSync() {
-    _syncTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+    _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       _syncInBackground();
     });
   }
 
   Future<void> _initInitialSync() async {
-    // Initial sync from remote if connected
     if (await hasNetworkConnection()) {
       try {
+        print('🔄 Initial part sync: Fetching data from remote...');
         await syncFromRemote();
+        await syncToRemote();
+        print('✅ Initial part sync completed');
       } catch (e) {
-        print('Initial part sync failed: $e');
+        print('❌ Initial part sync failed: $e');
       }
+    }
+  }
+
+  void _initBidirectionalSync() {
+    // Listen to local changes and sync to remote
+    Timer? localSyncDebounce;
+    _localSubscription = _localDataSource.watchAllParts().listen(
+      (localParts) async {
+        localSyncDebounce?.cancel();
+        localSyncDebounce = Timer(const Duration(seconds: 2), () async {
+          if (await hasNetworkConnection()) {
+            print('📱 Local part changes detected, syncing to remote...');
+            await syncToRemote();
+          }
+        });
+      },
+      onError: (error) {
+        print('❌ Local part sync error: $error');
+      },
+    );
+  }
+
+  Future<void> _syncRemoteToLocal(List<PartModel> remoteParts) async {
+    try {
+      int newCount = 0;
+      int updatedCount = 0;
+      int skippedCount = 0;
+
+      for (final remotePart in remoteParts) {
+        final localPart = await _localDataSource.getPartById(remotePart.partId);
+
+        if (localPart == null) {
+          // New part from remote
+          await _localDataSource.insertOrUpdatePart(remotePart);
+          newCount++;
+        } else {
+          // Use Last-Write Wins strategy
+          if (remotePart.isNewerThan(localPart)) {
+            final syncedPart = remotePart.copyWith(
+              isSynced: true,
+              needsSync: false,
+            );
+            await _localDataSource.insertOrUpdatePart(syncedPart);
+            updatedCount++;
+          } else {
+            skippedCount++;
+          }
+        }
+      }
+
+      if (newCount > 0 || updatedCount > 0) {
+        print('✅ Remote→Local part sync: $newCount new, $updatedCount updated, $skippedCount skipped');
+      }
+    } catch (e) {
+      print('❌ Remote→Local part sync failed: $e');
     }
   }
 
   Future<void> _syncInBackground() async {
     if (await hasNetworkConnection()) {
       try {
-        await syncToRemote();
         await syncFromRemote();
+        await syncToRemote();
       } catch (e) {
-        print('Background part sync failed: $e');
+        print('❌ Background part sync failed: $e');
       }
     }
   }
@@ -47,8 +108,8 @@ class PartRepositoryImpl implements PartRepository {
   @override
   Stream<List<Part>> watchAllParts() {
     return _localDataSource.watchAllParts().map(
-          (models) => models.map((model) => model.toEntity()).toList(),
-        );
+      (models) => models.map((model) => model.toEntity()).toList(),
+    );
   }
 
   @override
@@ -69,21 +130,26 @@ class PartRepositoryImpl implements PartRepository {
   Future<Part> createPart(Part part) async {
     try {
       final partWithTimestamp = part.copyWith(
-        createdAt: part.createdAt,
+        createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
 
+      // Generate ID if not provided
+      final uuid = const Uuid();
+      final partWithId = partWithTimestamp.partId.isEmpty
+          ? partWithTimestamp.copyWith(partId: uuid.v4())
+          : partWithTimestamp;
+
       // Save locally first (offline-first)
       final model = PartModel.fromEntity(
-        partWithTimestamp,
+        partWithId,
         isSynced: false,
         needsSync: true,
+        version: 1,
       );
 
       final savedModel = await _localDataSource.insertPart(model);
-
-      // Try to sync immediately if connected
-      _syncInBackground();
+      print('✅ Created part locally: ${savedModel.partId}');
 
       return savedModel.toEntity();
     } catch (e) {
@@ -97,16 +163,14 @@ class PartRepositoryImpl implements PartRepository {
       final updatedPart = part.copyWith(updatedAt: DateTime.now());
 
       // Update locally first
+      final existingModel = await _localDataSource.getPartById(part.partId);
       final model = PartModel.fromEntity(
         updatedPart,
-        isSynced: false,
-        needsSync: true,
+        version: (existingModel?.version ?? 0) + 1,
       );
 
       final savedModel = await _localDataSource.updatePart(model);
-
-      // Try to sync immediately if connected
-      _syncInBackground();
+      print('✅ Updated part locally: ${savedModel.partId} (v${savedModel.version})');
 
       return savedModel.toEntity();
     } catch (e) {
@@ -119,15 +183,7 @@ class PartRepositoryImpl implements PartRepository {
     try {
       // Delete locally first
       await _localDataSource.deletePart(partId);
-
-      // Try to sync deletion if connected
-      if (await hasNetworkConnection()) {
-        try {
-          await _remoteDataSource.deletePart(partId);
-        } catch (e) {
-          print('Failed to delete part from remote: $e');
-        }
-      }
+      print('✅ Deleted part locally: $partId');
     } catch (e) {
       throw Exception('Failed to delete part: $e');
     }
@@ -135,74 +191,63 @@ class PartRepositoryImpl implements PartRepository {
 
   @override
   Future<void> syncToRemote() async {
-    if (!await hasNetworkConnection()) return;
+    if (!await hasNetworkConnection()) {
+      print('⚠️ No network connection for part sync to remote');
+      return;
+    }
 
     try {
       final unsyncedParts = await _localDataSource.getUnsyncedParts();
+      if (unsyncedParts.isEmpty) return;
 
-      for (final localPart in unsyncedParts) {
+      print('📤 Syncing ${unsyncedParts.length} local part changes to remote...');
+
+      for (final part in unsyncedParts) {
         try {
-          // Check if part exists on remote
-          final remotePart = await _remoteDataSource.getPartById(
-            localPart.partId,
-          );
+          final remotePart = await _remoteDataSource.getPartById(part.partId);
 
           if (remotePart == null) {
-            // Create on remote
-            await _remoteDataSource.createPart(localPart);
+            // Create new part remotely
+            await _remoteDataSource.createPart(part);
+            print('➕ Created part ${part.partId} remotely');
           } else {
-            // Update on remote if local is newer
-            if (localPart.updatedAt != null &&
-                (remotePart.updatedAt == null ||
-                    localPart.updatedAt!.isAfter(remotePart.updatedAt!))) {
-              await _remoteDataSource.updatePart(localPart);
+            // Check if local version is newer (LWW)
+            if (part.isNewerThan(remotePart)) {
+              await _remoteDataSource.updatePart(part);
+              print('🔄 Updated part ${part.partId} remotely (LWW)');
+            } else {
+              print('⏭️ Skipped part ${part.partId} (remote is newer)');
             }
           }
 
-          // Mark as synced
-          await _localDataSource.markAsSynced(localPart.partId);
+          // Mark as synced locally
+          await _localDataSource.markAsSynced(part.partId);
         } catch (e) {
-          print('Failed to sync part ${localPart.partId}: $e');
+          print('❌ Failed to sync part ${part.partId}: $e');
         }
       }
+
+      print('✅ Local→Remote part sync completed');
     } catch (e) {
-      throw Exception('Failed to sync parts to remote: $e');
+      print('❌ Local→Remote part sync failed: $e');
+      throw Exception('Failed to sync to remote: $e');
     }
   }
 
   @override
   Future<void> syncFromRemote() async {
-    if (!await hasNetworkConnection()) return;
+    if (!await hasNetworkConnection()) {
+      print('⚠️ No network connection for part sync from remote');
+      return;
+    }
 
     try {
+      print('📥 Syncing parts from remote to local...');
       final remoteParts = await _remoteDataSource.getAllParts();
-
-      for (final remotePart in remoteParts) {
-        final localPart = await _localDataSource.getPartById(
-          remotePart.partId,
-        );
-
-        if (localPart == null) {
-          // New part from remote
-          final syncedModel = remotePart.copyWith(
-            isSynced: true,
-            needsSync: false,
-          );
-          await _localDataSource.insertPart(syncedModel);
-        } else if (remotePart.updatedAt != null &&
-            (localPart.updatedAt == null ||
-                remotePart.updatedAt!.isAfter(localPart.updatedAt!)) &&
-            localPart.isSynced) {
-          // Update local with newer remote data (only if local is synced)
-          final updatedModel = remotePart.copyWith(
-            isSynced: true,
-            needsSync: false,
-          );
-          await _localDataSource.updatePart(updatedModel);
-        }
-      }
+      await _syncRemoteToLocal(remoteParts);
     } catch (e) {
-      throw Exception('Failed to sync parts from remote: $e');
+      print('❌ Part sync from remote failed: $e');
+      throw Exception('Failed to sync from remote: $e');
     }
   }
 
@@ -222,6 +267,9 @@ class PartRepositoryImpl implements PartRepository {
 
   void dispose() {
     _syncTimer?.cancel();
+    _remoteSubscription?.cancel();
+    _localSubscription?.cancel();
     _localDataSource.dispose();
+    _remoteDataSource.dispose();
   }
 }

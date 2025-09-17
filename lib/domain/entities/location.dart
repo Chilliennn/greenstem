@@ -6,7 +6,7 @@ class Location {
   final double? latitude;
   final double? longitude;
   final DateTime createdAt;
-  final DateTime? updatedAt;
+  final DateTime updatedAt;
 
   const Location({
     required this.locationId,
@@ -16,7 +16,7 @@ class Location {
     this.latitude,
     this.longitude,
     required this.createdAt,
-    this.updatedAt,
+    required this.updatedAt,
   });
 
   Location copyWith({
@@ -46,9 +46,21 @@ class Location {
 
   bool get hasAddress => address != null && address!.isNotEmpty;
 
+  bool get hasName => name != null && name!.isNotEmpty;
+
   bool get isWarehouse => type?.toLowerCase() == 'warehouse';
 
   bool get isCustomer => type?.toLowerCase() == 'customer';
+
+  bool get isPickupLocation => type?.toLowerCase() == 'pickup';
+
+  bool get isDeliveryLocation => type?.toLowerCase() == 'delivery';
+
+  String get displayName => name ?? 'Unnamed Location';
+
+  String get displayType => type ?? 'Unknown';
+
+  String get displayAddress => address ?? 'No address';
 
   @override
   bool operator ==(Object other) =>

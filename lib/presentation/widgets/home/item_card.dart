@@ -5,7 +5,7 @@ class ItemCard extends StatefulWidget {
   final String state;
   final Delivery? delivery;
 
-  ItemCard({super.key, required this.state, this.delivery});
+  const ItemCard({super.key, required this.state, this.delivery});
 
   @override
   State<ItemCard> createState() => _ItemCardState();
@@ -18,7 +18,6 @@ class _ItemCardState extends State<ItemCard> {
   Widget build(BuildContext context) {
     switch (state) {
       case "incoming":
-      case "pending":
         return _IncomingCard(delivery: widget.delivery);
 
       case "awaiting":

@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/delivery_model.dart';
+import '../../../core/exceptions/app_exceptions.dart';
+import 'dart:async';
 
 abstract class RemoteDeliveryDataSource {
   Future<List<DeliveryModel>> getAllDeliveries();
@@ -11,131 +13,168 @@ abstract class RemoteDeliveryDataSource {
   Future<DeliveryModel> updateDelivery(DeliveryModel delivery);
 
   Future<void> deleteDelivery(String id);
+
+  Stream<List<DeliveryModel>> watchAllDeliveries();
+
+  void dispose();
 }
 
 class SupabaseDeliveryDataSource implements RemoteDeliveryDataSource {
-  final SupabaseClient _client = Supabase.instance.client;
+  final SupabaseClient _supabase = Supabase.instance.client;
+  final StreamController<List<DeliveryModel>> _deliveriesController =
+      StreamController<List<DeliveryModel>>.broadcast();
+
+  RealtimeChannel? _channel;
+  Timer? _heartbeatTimer;
+
+  SupabaseDeliveryDataSource() {
+    _initRealtimeListener();
+    _startHeartbeat();
+  }
+
+  void _initRealtimeListener() {
+    try {
+      _channel = _supabase
+          .channel('delivery_changes')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'delivery',
+            callback: (payload) {
+              print(
+                  '🔄 Real-time delivery change detected: ${payload.eventType}');
+              print('📊 Payload: ${payload.newRecord}');
+              _refreshDeliveries();
+            },
+          )
+          .subscribe();
+
+      print('✅ Real-time listener initialized for deliveries');
+    } catch (e) {
+      print('❌ Failed to initialize real-time listener: $e');
+    }
+  }
+
+  void _startHeartbeat() {
+    // Periodic refresh to ensure we don't miss any changes
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _refreshDeliveries();
+    });
+  }
+
+  Future<void> _refreshDeliveries() async {
+    try {
+      final deliveries = await getAllDeliveries();
+      _deliveriesController.add(deliveries);
+      print('📡 Remote deliveries refreshed: ${deliveries.length} items');
+    } catch (e) {
+      print('❌ Error refreshing deliveries: $e');
+    }
+  }
+
+  @override
+  Stream<List<DeliveryModel>> watchAllDeliveries() {
+    // Initial load
+    _refreshDeliveries();
+    return _deliveriesController.stream;
+  }
 
   @override
   Future<List<DeliveryModel>> getAllDeliveries() async {
     try {
-      final response = await _client
+      final response = await _supabase
           .from('delivery')
-          .select()
+          .select('*')
           .order('updated_at', ascending: false);
 
-      return (response as List)
-          .map((json) => _safeParseDeliveryModel(json))
-          .toList();
+      final List<dynamic> data = response as List<dynamic>;
+      final deliveries =
+          data.map((json) => DeliveryModel.fromSupabaseJson(json)).toList();
+
+      print('📥 Fetched ${deliveries.length} deliveries from Supabase');
+      return deliveries;
     } catch (e) {
-      throw Exception('Failed to fetch deliveries from remote: $e');
+      print('❌ Error fetching deliveries: $e');
+      throw NetworkException('Failed to fetch deliveries: $e');
     }
   }
 
   @override
   Future<DeliveryModel?> getDeliveryById(String id) async {
     try {
-      final response = await _client
+      final response = await _supabase
           .from('delivery')
-          .select()
+          .select('*')
           .eq('delivery_id', id)
           .maybeSingle();
 
-      return response != null ? _safeParseDeliveryModel(response) : null;
+      if (response == null) return null;
+      return DeliveryModel.fromSupabaseJson(response);
     } catch (e) {
-      throw Exception('Failed to fetch delivery from remote: $e');
+      print('❌ Error fetching delivery $id: $e');
+      throw NetworkException('Failed to fetch delivery: $e');
     }
   }
 
   @override
   Future<DeliveryModel> createDelivery(DeliveryModel delivery) async {
     try {
-      final data = delivery.toJson();
-      // Remove local-only fields
-      data.remove('is_synced');
-      data.remove('needs_sync');
+      print('📤 Creating delivery ${delivery.deliveryId} in Supabase');
 
-      // Remove user_id if it's the test UUID to avoid foreign key constraint
-      if (data['user_id'] == '550e8400-e29b-41d4-a716-446655440000') {
-        data['user_id'] = null;
-      }
+      final response = await _supabase
+          .from('delivery')
+          .insert(delivery.toSupabaseJson())
+          .select()
+          .single();
 
-      final response =
-          await _client.from('delivery').insert(data).select().single();
-
-      return _safeParseDeliveryModel(response);
+      final created = DeliveryModel.fromSupabaseJson(response);
+      print('✅ Created delivery ${created.deliveryId} in Supabase');
+      return created;
     } catch (e) {
-      throw Exception('Failed to create delivery on remote: $e');
+      print('❌ Error creating delivery: $e');
+      throw NetworkException('Failed to create delivery: $e');
     }
   }
 
   @override
   Future<DeliveryModel> updateDelivery(DeliveryModel delivery) async {
     try {
-      final data = delivery.toJson();
-      // Remove local-only fields
-      data.remove('is_synced');
-      data.remove('needs_sync');
+      print('📤 Updating delivery ${delivery.deliveryId} in Supabase');
 
-      // Remove user_id if it's the test UUID to avoid foreign key constraint
-      if (data['user_id'] == '550e8400-e29b-41d4-a716-446655440000') {
-        data['user_id'] = null;
-      }
-
-      final response = await _client
+      final response = await _supabase
           .from('delivery')
-          .update(data)
+          .update(delivery.toSupabaseJson())
           .eq('delivery_id', delivery.deliveryId)
           .select()
           .single();
 
-      return _safeParseDeliveryModel(response);
+      final updated = DeliveryModel.fromSupabaseJson(response);
+      print('✅ Updated delivery ${updated.deliveryId} in Supabase');
+      return updated;
     } catch (e) {
-      throw Exception('Failed to update delivery on remote: $e');
+      print('❌ Error updating delivery: $e');
+      throw NetworkException('Failed to update delivery: $e');
     }
   }
 
   @override
   Future<void> deleteDelivery(String id) async {
     try {
-      await _client.from('delivery').delete().eq('delivery_id', id);
+      print('📤 Deleting delivery $id from Supabase');
+
+      await _supabase.from('delivery').delete().eq('delivery_id', id);
+
+      print('✅ Deleted delivery $id from Supabase');
     } catch (e) {
-      throw Exception('Failed to delete delivery on remote: $e');
+      print('❌ Error deleting delivery: $e');
+      throw NetworkException('Failed to delete delivery: $e');
     }
   }
 
-  // Safe parsing method to handle null values
-  DeliveryModel _safeParseDeliveryModel(Map<String, dynamic> json) {
-    try {
-      return DeliveryModel(
-        deliveryId: json['delivery_id']?.toString() ?? '',
-        userId: json['user_id']?.toString(),
-        status: json['status']?.toString(),
-        pickupLocation: json['pickup_location']?.toString(),
-        deliveryLocation: json['delivery_location']?.toString(),
-        dueDatetime: json['due_datetime'] != null
-            ? DateTime.tryParse(json['due_datetime'].toString())
-            : null,
-        pickupTime: json['pickup_time'] != null
-            ? DateTime.tryParse(json['pickup_time'].toString())
-            : null,
-        deliveredTime: json['delivered_time'] != null
-            ? DateTime.tryParse(json['delivered_time'].toString())
-            : null,
-        vehicleNumber: json['vehicle_number']?.toString(),
-        proofImgPath: json['proof_img_path']?.toString(),
-        createdAt: json['created_at'] != null
-            ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-            : DateTime.now(),
-        updatedAt: json['updated_at'] != null
-            ? DateTime.tryParse(json['updated_at'].toString()) ?? DateTime.now()
-            : DateTime.now(),
-        isSynced: true,
-        // Remote data is always synced
-        needsSync: false, // Remote data doesn't need sync
-      );
-    } catch (e) {
-      throw Exception('Failed to parse delivery model: $e');
-    }
+  @override
+  void dispose() {
+    _channel?.unsubscribe();
+    _heartbeatTimer?.cancel();
+    _deliveriesController.close();
   }
 }

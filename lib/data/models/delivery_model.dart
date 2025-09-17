@@ -15,6 +15,7 @@ class DeliveryModel {
   final DateTime updatedAt;
   final bool isSynced;
   final bool needsSync;
+  final int version; // For conflict resolution
 
   const DeliveryModel({
     required this.deliveryId,
@@ -31,8 +32,10 @@ class DeliveryModel {
     required this.updatedAt,
     this.isSynced = false,
     this.needsSync = true,
+    this.version = 1,
   });
 
+  // From local SQLite JSON
   factory DeliveryModel.fromJson(Map<String, dynamic> json) {
     return DeliveryModel(
       deliveryId: json['delivery_id'] as String,
@@ -55,9 +58,39 @@ class DeliveryModel {
       updatedAt: DateTime.parse(json['updated_at'] as String),
       isSynced: (json['is_synced'] as int?) == 1,
       needsSync: (json['needs_sync'] as int?) == 1,
+      version: (json['version'] as int?) ?? 1,
     );
   }
 
+  // From Supabase JSON
+  factory DeliveryModel.fromSupabaseJson(Map<String, dynamic> json) {
+    return DeliveryModel(
+      deliveryId: json['delivery_id'] as String,
+      userId: json['user_id'] as String?,
+      status: json['status'] as String?,
+      pickupLocation: json['pickup_location'] as String?,
+      deliveryLocation: json['delivery_location'] as String?,
+      dueDatetime: json['due_datetime'] != null
+          ? DateTime.parse(json['due_datetime'] as String)
+          : null,
+      pickupTime: json['pickup_time'] != null
+          ? DateTime.parse(json['pickup_time'] as String)
+          : null,
+      deliveredTime: json['delivered_time'] != null
+          ? DateTime.parse(json['delivered_time'] as String)
+          : null,
+      vehicleNumber: json['vehicle_number'] as String?,
+      proofImgPath: json['proof_img_path'] as String?,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+      isSynced: true,
+      // From remote, so it's synced
+      needsSync: false,
+      version: (json['version'] as int?) ?? 1,
+    );
+  }
+
+  // To local SQLite JSON
   Map<String, dynamic> toJson() {
     return {
       'delivery_id': deliveryId,
@@ -74,9 +107,30 @@ class DeliveryModel {
       'updated_at': updatedAt.toIso8601String(),
       'is_synced': isSynced ? 1 : 0,
       'needs_sync': needsSync ? 1 : 0,
+      'version': version,
     };
   }
 
+  // To Supabase JSON
+  Map<String, dynamic> toSupabaseJson() {
+    return {
+      'delivery_id': deliveryId,
+      'user_id': userId,
+      'status': status,
+      'pickup_location': pickupLocation,
+      'delivery_location': deliveryLocation,
+      'due_datetime': dueDatetime?.toIso8601String(),
+      'pickup_time': pickupTime?.toIso8601String(),
+      'delivered_time': deliveredTime?.toIso8601String(),
+      'vehicle_number': vehicleNumber,
+      'proof_img_path': proofImgPath,
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
+      'version': version,
+    };
+  }
+
+  // Convert to domain entity
   Delivery toEntity() {
     return Delivery(
       deliveryId: deliveryId,
@@ -94,8 +148,9 @@ class DeliveryModel {
     );
   }
 
+  // Create from domain entity
   factory DeliveryModel.fromEntity(Delivery entity,
-      {bool? isSynced, bool? needsSync}) {
+      {bool? isSynced, bool? needsSync, int? version}) {
     return DeliveryModel(
       deliveryId: entity.deliveryId,
       userId: entity.userId,
@@ -111,6 +166,7 @@ class DeliveryModel {
       updatedAt: entity.updatedAt,
       isSynced: isSynced ?? false,
       needsSync: needsSync ?? true,
+      version: version ?? 1,
     );
   }
 
@@ -129,6 +185,7 @@ class DeliveryModel {
     DateTime? updatedAt,
     bool? isSynced,
     bool? needsSync,
+    int? version,
   }) {
     return DeliveryModel(
       deliveryId: deliveryId ?? this.deliveryId,
@@ -145,6 +202,19 @@ class DeliveryModel {
       updatedAt: updatedAt ?? this.updatedAt,
       isSynced: isSynced ?? this.isSynced,
       needsSync: needsSync ?? this.needsSync,
+      version: version ?? this.version,
     );
+  }
+
+  // Last-Write Wins conflict resolution
+  bool isNewerThan(DeliveryModel other) {
+    // First compare by updatedAt timestamp
+    final timeDiff = updatedAt.compareTo(other.updatedAt);
+    if (timeDiff != 0) {
+      return timeDiff > 0;
+    }
+
+    // If timestamps are equal, compare by version
+    return version > other.version;
   }
 }

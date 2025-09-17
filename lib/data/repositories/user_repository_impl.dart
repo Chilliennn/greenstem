@@ -1,46 +1,119 @@
 import 'dart:async';
+import 'package:uuid/uuid.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/user_repository.dart';
 import '../datasources/local/local_user_database_service.dart';
 import '../datasources/remote/remote_user_datasource.dart';
 import '../models/user_model.dart';
 import '../../core/services/network_service.dart';
-import 'package:uuid/uuid.dart';
 
 class UserRepositoryImpl implements UserRepository {
   final LocalUserDatabaseService _localDataSource;
   final RemoteUserDataSource _remoteDataSource;
   Timer? _syncTimer;
+  StreamSubscription? _remoteSubscription;
+  StreamSubscription? _localSubscription;
 
   UserRepositoryImpl(this._localDataSource, this._remoteDataSource) {
     _initPeriodicSync();
     _initInitialSync();
+    _initBidirectionalSync();
   }
 
   void _initPeriodicSync() {
-    _syncTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+    _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       _syncInBackground();
     });
   }
 
   Future<void> _initInitialSync() async {
-    // Initial sync from remote if connected
     if (await hasNetworkConnection()) {
       try {
+        print('🔄 Initial user sync: Fetching data from remote...');
         await syncFromRemote();
+        await syncToRemote();
+        print('✅ Initial user sync completed');
       } catch (e) {
-        print('Initial profiles sync failed: $e');
+        print('❌ Initial user sync failed: $e');
       }
+    }
+  }
+
+  void _initBidirectionalSync() {
+    // Listen to remote changes and apply to local
+    _remoteSubscription = _remoteDataSource.watchAllUsers().listen(
+      (remoteUsers) async {
+        if (await hasNetworkConnection()) {
+          print('📡 Remote user changes detected, syncing to local...');
+          await _syncRemoteToLocal(remoteUsers);
+        }
+      },
+      onError: (error) {
+        print('❌ Remote user sync error: $error');
+      },
+    );
+
+    // Listen to local changes and sync to remote (with debouncing)
+    Timer? localSyncDebounce;
+    _localSubscription = _localDataSource.watchAllUsers().listen(
+      (localUsers) async {
+        localSyncDebounce?.cancel();
+        localSyncDebounce = Timer(const Duration(seconds: 2), () async {
+          if (await hasNetworkConnection()) {
+            print('📱 Local user changes detected, syncing to remote...');
+            await syncToRemote();
+          }
+        });
+      },
+      onError: (error) {
+        print('❌ Local user sync error: $error');
+      },
+    );
+  }
+
+  Future<void> _syncRemoteToLocal(List<UserModel> remoteUsers) async {
+    try {
+      int newCount = 0;
+      int updatedCount = 0;
+      int skippedCount = 0;
+
+      for (final remoteUser in remoteUsers) {
+        final localUser = await _localDataSource.getUserById(remoteUser.userId);
+
+        if (localUser == null) {
+          // New user from remote
+          await _localDataSource.insertOrUpdateUser(remoteUser);
+          newCount++;
+        } else {
+          // Use Last-Write Wins strategy
+          if (remoteUser.isNewerThan(localUser)) {
+            final syncedUser = remoteUser.copyWith(
+              isSynced: true,
+              needsSync: false,
+            );
+            await _localDataSource.insertOrUpdateUser(syncedUser);
+            updatedCount++;
+          } else {
+            skippedCount++;
+          }
+        }
+      }
+
+      if (newCount > 0 || updatedCount > 0) {
+        print('✅ Remote→Local user sync: $newCount new, $updatedCount updated, $skippedCount skipped');
+      }
+    } catch (e) {
+      print('❌ Remote→Local user sync failed: $e');
     }
   }
 
   Future<void> _syncInBackground() async {
     if (await hasNetworkConnection()) {
       try {
-        await syncToRemote();
         await syncFromRemote();
+        await syncToRemote();
       } catch (e) {
-        print('Background profiles sync failed: $e');
+        print('❌ Background user sync failed: $e');
       }
     }
   }
@@ -48,9 +121,8 @@ class UserRepositoryImpl implements UserRepository {
   @override
   Stream<List<User>> watchAllUsers() {
     return _localDataSource.watchAllUsers().map(
-          (models) =>
-              models.map((model) => model.toEntity().toPublicUser()).toList(),
-        );
+      (models) => models.map((model) => model.toEntity().toPublicUser()).toList(),
+    );
   }
 
   @override
@@ -69,105 +141,79 @@ class UserRepositoryImpl implements UserRepository {
 
   @override
   Stream<User?> watchCurrentUser() {
-    return _localDataSource
-        .watchCurrentUser()
-        .map((model) => model?.toEntity().toPublicUser());
+    return _localDataSource.watchCurrentUser().map((model) => model?.toEntity().toPublicUser());
   }
 
   @override
   Future<User?> login(String username, String password) async {
     try {
-      UserModel? userModel;
+      // Try local first
+      var userModel = await _localDataSource.getUserByUsername(username);
+      userModel ??= await _localDataSource.getUserByEmail(username);
 
+      if (userModel != null && userModel.password == password) {
+        await _localDataSource.setCurrentUser(userModel.userId);
+        return userModel.toEntity().toPublicUser();
+      }
+
+      // Try remote if local fails
       if (await hasNetworkConnection()) {
-        // Try remote login first
-        try {
-          userModel = await _remoteDataSource.login(username, password);
-          if (userModel != null) {
-            // Save to local database and set as current profiles
-            final localModel = userModel.copyWith(
-              isSynced: true,
-              needsSync: false,
-              isCurrentUser: true,
-            );
-            await _localDataSource.insertOrUpdateUser(localModel);
-            await _localDataSource.setCurrentUser(userModel.userId);
-          }
-        } catch (e) {
-          print('Remote login failed: $e');
-        }
-      }
-
-      // Fallback to local login
-      if (userModel == null) {
-        userModel = await _localDataSource.getUserByUsername(username);
-        if (userModel != null && userModel.password == password) {
+        userModel = await _remoteDataSource.login(username, password);
+        if (userModel != null) {
+          // Save to local and set as current
+          final localUser = userModel.copyWith(
+            isCurrentUser: true,
+            isSynced: true,
+            needsSync: false,
+          );
+          await _localDataSource.insertOrUpdateUser(localUser);
           await _localDataSource.setCurrentUser(userModel.userId);
-        } else {
-          userModel = null;
+          return userModel.toEntity().toPublicUser();
         }
       }
 
-      return userModel?.toEntity();
+      return null;
     } catch (e) {
-      throw Exception('Login failed: $e');
+      throw Exception('Failed to login: $e');
     }
   }
 
   @override
   Future<User> register(User user) async {
     try {
-      if (user.email != null &&
-          await _localDataSource.isEmailExists(user.email!)) {
-        throw Exception('Email already exists');
-      }
-
-      if (user.username != null &&
-          await _localDataSource.isUsernameExists(user.username!)) {
-        throw Exception('Username already exists');
-      }
-      final userId = const Uuid().v4();
-      final userWithId = user.copyWith(
-        userId: userId,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
+      final userWithId = user.userId.isEmpty
+          ? user.copyWith(
+              userId: const Uuid().v4(),
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            )
+          : user.copyWith(
+              updatedAt: DateTime.now(),
+            );
 
       // Save locally first (offline-first)
       final model = UserModel.fromEntity(
         userWithId,
         isSynced: false,
         needsSync: true,
-        isCurrentUser: true,
+        version: 1,
       );
 
       final savedModel = await _localDataSource.insertUser(model);
-      await _localDataSource.setCurrentUser(userId);
-
-      // Try to sync immediately if connected
-      _syncInBackground();
+      print('✅ Created user locally: ${savedModel.userId}');
 
       return savedModel.toEntity();
     } catch (e) {
-      throw Exception('Failed to register profiles: $e');
+      throw Exception('Failed to register user: $e');
     }
   }
 
   @override
   Future<void> logout() async {
     try {
-      if (await hasNetworkConnection()) {
-        try {
-          await _remoteDataSource.logout();
-        } catch (e) {
-          print('Remote logout failed: $e');
-        }
-      }
-
-      // Clear local current profiles
       await _localDataSource.clearCurrentUser();
     } catch (e) {
-      throw Exception('Logout failed: $e');
+      throw Exception('Failed to logout: $e');
     }
   }
 
@@ -177,35 +223,22 @@ class UserRepositoryImpl implements UserRepository {
       final userModel = await _localDataSource.getCurrentUser();
       return userModel?.toEntity().toPublicUser();
     } catch (e) {
-      throw Exception('Failed to get current profiles: $e');
+      throw Exception('Failed to get current user: $e');
     }
   }
 
   @override
   Future<User> createUser(User user) async {
     try {
-      final userId = user.userId.isEmpty ? const Uuid().v4() : user.userId;
-      final userWithId = user.copyWith(
-        userId: userId,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
+      final userWithId = user.userId.isEmpty
+          ? user.copyWith(userId: const Uuid().v4())
+          : user;
 
-      // Save locally first (offline-first)
-      final model = UserModel.fromEntity(
-        userWithId,
-        isSynced: false,
-        needsSync: true,
-      );
-
+      final model = UserModel.fromEntity(userWithId);
       final savedModel = await _localDataSource.insertUser(model);
-
-      // Try to sync immediately if connected
-      _syncInBackground();
-
       return savedModel.toEntity();
     } catch (e) {
-      throw Exception('Failed to create profiles: $e');
+      throw Exception('Failed to create user: $e');
     }
   }
 
@@ -215,20 +248,18 @@ class UserRepositoryImpl implements UserRepository {
       final updatedUser = user.copyWith(updatedAt: DateTime.now());
 
       // Update locally first
+      final existingModel = await _localDataSource.getUserById(user.userId);
       final model = UserModel.fromEntity(
         updatedUser,
-        isSynced: false,
-        needsSync: true,
+        version: (existingModel?.version ?? 0) + 1,
       );
 
       final savedModel = await _localDataSource.updateUser(model);
-
-      // Try to sync immediately if connected
-      _syncInBackground();
+      print('✅ Updated user locally: ${savedModel.userId} (v${savedModel.version})');
 
       return savedModel.toEntity();
     } catch (e) {
-      throw Exception('Failed to update profiles: $e');
+      throw Exception('Failed to update user: $e');
     }
   }
 
@@ -237,17 +268,19 @@ class UserRepositoryImpl implements UserRepository {
     try {
       // Delete locally first
       await _localDataSource.deleteUser(userId);
+      print('✅ Deleted user locally: $userId');
 
-      // Try to sync deletion if connected
+      // Try to delete remotely if connected
       if (await hasNetworkConnection()) {
         try {
           await _remoteDataSource.deleteUser(userId);
+          print('✅ Deleted user remotely: $userId');
         } catch (e) {
-          print('Failed to delete profiles from remote: $e');
+          print('❌ Failed to delete user remotely: $e');
         }
       }
     } catch (e) {
-      throw Exception('Failed to delete profiles: $e');
+      throw Exception('Failed to delete user: $e');
     }
   }
 
@@ -262,31 +295,30 @@ class UserRepositoryImpl implements UserRepository {
       String? firstName,
       String? lastName}) async {
     try {
-      final currentUser = await _localDataSource.getUserById(userId);
-      if (currentUser == null) {
+      final existingModel = await _localDataSource.getUserById(userId);
+      if (existingModel == null) {
         throw Exception('User not found');
       }
 
-      final updatedModel = currentUser.copyWith(
+      final updatedUser = existingModel.copyWith(
         username: username,
         email: email,
         phoneNo: phoneNo,
         birthDate: birthDate,
         gender: gender,
         profilePath: profilePath,
+        firstName: firstName,
+        lastName: lastName,
         updatedAt: DateTime.now(),
-        isSynced: false,
+        version: existingModel.version + 1,
         needsSync: true,
+        isSynced: false,
       );
 
-      final savedModel = await _localDataSource.updateUser(updatedModel);
-
-      // Try to sync immediately if connected
-      _syncInBackground();
-
+      final savedModel = await _localDataSource.updateUser(updatedUser);
       return savedModel.toEntity();
     } catch (e) {
-      throw Exception('Failed to update profiles: $e');
+      throw Exception('Failed to update profile: $e');
     }
   }
 
@@ -294,27 +326,24 @@ class UserRepositoryImpl implements UserRepository {
   Future<User> changePassword(
       String userId, String oldPassword, String newPassword) async {
     try {
-      final currentUser = await _localDataSource.getUserById(userId);
-      if (currentUser == null) {
+      final existingModel = await _localDataSource.getUserById(userId);
+      if (existingModel == null) {
         throw Exception('User not found');
       }
 
-      if (currentUser.password != oldPassword) {
-        throw Exception('Invalid old password');
+      if (existingModel.password != oldPassword) {
+        throw Exception('Current password is incorrect');
       }
 
-      final updatedModel = currentUser.copyWith(
+      final updatedUser = existingModel.copyWith(
         password: newPassword,
         updatedAt: DateTime.now(),
-        isSynced: false,
+        version: existingModel.version + 1,
         needsSync: true,
+        isSynced: false,
       );
 
-      final savedModel = await _localDataSource.updateUser(updatedModel);
-
-      // Try to sync immediately if connected
-      _syncInBackground();
-
+      final savedModel = await _localDataSource.updateUser(updatedUser);
       return savedModel.toEntity();
     } catch (e) {
       throw Exception('Failed to change password: $e');
@@ -323,76 +352,63 @@ class UserRepositoryImpl implements UserRepository {
 
   @override
   Future<void> syncToRemote() async {
-    if (!await hasNetworkConnection()) return;
+    if (!await hasNetworkConnection()) {
+      print('⚠️ No network connection for user sync to remote');
+      return;
+    }
 
     try {
       final unsyncedUsers = await _localDataSource.getUnsyncedUsers();
+      if (unsyncedUsers.isEmpty) return;
 
-      for (final localUser in unsyncedUsers) {
+      print('📤 Syncing ${unsyncedUsers.length} local user changes to remote...');
+
+      for (final user in unsyncedUsers) {
         try {
-          // Check if profiles exists on remote
-          final remoteUser = await _remoteDataSource.getUserById(
-            localUser.userId,
-          );
+          final remoteUser = await _remoteDataSource.getUserById(user.userId);
 
           if (remoteUser == null) {
-            // Create on remote
-            await _remoteDataSource.createUser(localUser);
+            // Create new user remotely
+            await _remoteDataSource.createUser(user);
+            print('➕ Created user ${user.userId} remotely');
           } else {
-            // Update on remote if local is newer
-            if (localUser.updatedAt != null &&
-                (remoteUser.updatedAt == null ||
-                    localUser.updatedAt!.isAfter(remoteUser.updatedAt!))) {
-              await _remoteDataSource.updateUser(localUser);
+            // Check if local version is newer (LWW)
+            if (user.isNewerThan(remoteUser)) {
+              await _remoteDataSource.updateUser(user);
+              print('🔄 Updated user ${user.userId} remotely (LWW)');
+            } else {
+              print('⏭️ Skipped user ${user.userId} (remote is newer)');
             }
           }
 
-          // Mark as synced
-          await _localDataSource.markAsSynced(localUser.userId);
+          // Mark as synced locally
+          await _localDataSource.markAsSynced(user.userId);
         } catch (e) {
-          print('Failed to sync profiles ${localUser.userId}: $e');
+          print('❌ Failed to sync user ${user.userId}: $e');
         }
       }
+
+      print('✅ Local→Remote user sync completed');
     } catch (e) {
-      throw Exception('Failed to sync users to remote: $e');
+      print('❌ Local→Remote user sync failed: $e');
+      throw Exception('Failed to sync to remote: $e');
     }
   }
 
   @override
   Future<void> syncFromRemote() async {
-    if (!await hasNetworkConnection()) return;
+    if (!await hasNetworkConnection()) {
+      print('⚠️ No network connection for user sync from remote');
+      return;
+    }
 
     try {
+      print('📥 Syncing users from remote to local...');
       final remoteUsers = await _remoteDataSource.getAllUsers();
-
-      for (final remoteUser in remoteUsers) {
-        final localUser = await _localDataSource.getUserById(
-          remoteUser.userId,
-        );
-
-        if (localUser == null) {
-          // New profiles from remote
-          final syncedModel = remoteUser.copyWith(
-            isSynced: true,
-            needsSync: false,
-            isCurrentUser: false,
-          );
-          await _localDataSource.insertOrUpdateUser(syncedModel);
-        } else if (remoteUser.updatedAt != null &&
-            (localUser.updatedAt == null ||
-                remoteUser.updatedAt!.isAfter(localUser.updatedAt!)) &&
-            localUser.isSynced) {
-          // Update local with newer remote data (only if local is synced)
-          final updatedModel = remoteUser.copyWith(
-            isSynced: true,
-            needsSync: false,
-            isCurrentUser: localUser.isCurrentUser,
-          );
-          await _localDataSource.updateUser(updatedModel);
-        }
-      }
+      await _syncRemoteToLocal(remoteUsers);
     } catch (e) {
-      throw Exception('Failed to sync users from remote: $e');
+      print('❌ User sync from remote failed: $e');
+      throw Exception('Failed to sync from remote: $e');
     }
   }
 
@@ -402,7 +418,7 @@ class UserRepositoryImpl implements UserRepository {
   @override
   Future<List<User>> getCachedUsers() async {
     final models = await _localDataSource.getAllUsers();
-    return models.map((model) => model.toEntity().toPublicUser()).toList();
+    return models.map((model) => model.toEntity()).toList();
   }
 
   @override
@@ -412,40 +428,15 @@ class UserRepositoryImpl implements UserRepository {
 
   @override
   Future<void> resetPassword(String email, String newPassword) async {
-    try {
-      // Get user by email
-      final userModel = await _localDataSource.getUserByEmail(email);
-      if (userModel == null) {
-        throw Exception('User not found');
-      }
-
-      // Update password locally
-      final updatedModel = userModel.copyWith(
-        password: newPassword,
-        updatedAt: DateTime.now(),
-        isSynced: false,
-        needsSync: true,
-      );
-
-      await _localDataSource.updateUser(updatedModel);
-
-      // Try to sync immediately if connected
-      if (await hasNetworkConnection()) {
-        try {
-          await _remoteDataSource.updatePassword(userModel.userId, newPassword);
-          await _localDataSource.markAsSynced(userModel.userId);
-        } catch (e) {
-          print('Failed to sync password reset to remote: $e');
-          // Password was updated locally, will sync later
-        }
-      }
-    } catch (e) {
-      throw Exception('Failed to reset password: $e');
-    }
+    // Implementation for password reset
+    throw UnimplementedError();
   }
 
   void dispose() {
     _syncTimer?.cancel();
+    _remoteSubscription?.cancel();
+    _localSubscription?.cancel();
     _localDataSource.dispose();
+    _remoteDataSource.dispose();
   }
 }

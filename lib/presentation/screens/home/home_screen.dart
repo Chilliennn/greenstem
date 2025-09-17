@@ -35,6 +35,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   StreamSubscription<bool>? _connectivitySubscription;
   StreamSubscription<User?>? _userSubscription;
   bool isActiveTab = true;
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -44,7 +45,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _listenToConnectivity();
     _loadCurrentUser();
 
-    // Debug data synchronization
+    // debug data synchronization
     _debugDataSync();
   }
 
@@ -52,23 +53,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     print('DEBUG: Checking data synchronization...');
 
     try {
-      // Check local data
+      // check local data
       final localDeliveries = await _deliveryRepository.getCachedDeliveries();
       print('Local deliveries count: ${localDeliveries.length}');
 
       if (await NetworkService.hasConnection()) {
         print('Network is available, checking remote data...');
 
-        // Try to fetch from remote
+        // try to fetch from remote
         final remoteDataSource = SupabaseDeliveryDataSource();
         final remoteDeliveries = await remoteDataSource.getAllDeliveries();
         print('Remote deliveries count: ${remoteDeliveries.length}');
 
-        // Force a sync
+        // force a sync
         print('Forcing sync from remote...');
         await _deliveryRepository.syncFromRemote();
 
-        // Check local again
+        // check local again
         final localAfterSync = await _deliveryRepository.getCachedDeliveries();
         print('Local deliveries after sync: ${localAfterSync.length}');
       } else {
@@ -80,14 +81,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _initializeServices() {
-    // Delivery services
+    // delivery services
     final localDeliveryDataSource = LocalDeliveryDatabaseService();
     final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
     _deliveryRepository = DeliveryRepositoryImpl(
         localDeliveryDataSource, remoteDeliveryDataSource);
     _deliveryService = DeliveryService(_deliveryRepository);
 
-    // User services
+    // user services
     final localUserDataSource = LocalUserDatabaseService();
     final remoteUserDataSource = SupabaseUserDataSource();
     _userRepository =
@@ -100,7 +101,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (mounted) {
       setState(() => _isOnline = isOnline);
 
-      // Trigger sync when we come online
+      // trigger sync when we come online
       if (isOnline) {
         _syncAllData();
       }
@@ -113,7 +114,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (mounted) {
         setState(() => _isOnline = isConnected);
 
-        // Trigger sync when connectivity changes to online
+        // trigger sync when connectivity changes to online
         if (isConnected) {
           _syncAllData();
         }
@@ -123,12 +124,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _syncAllData() async {
     try {
+      setState(() {
+        _isSyncing = true;
+      });
       print('Starting data synchronization...');
       await _deliveryRepository.syncFromRemote();
       await _userRepository.syncFromRemote();
       print('Data synchronization completed');
     } catch (e) {
       print('Sync error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSyncing = false;
+        });
+      }
     }
   }
 
@@ -152,19 +162,81 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
         backgroundColor: const Color(0xFF111111),
         actions: [
-          // Network status indicator
+          // Sync status indicator
           Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: Icon(
-              _isOnline ? Icons.cloud_done : Icons.cloud_off,
-              color: _isOnline ? Colors.green : Colors.red,
-              size: 20,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _isOnline ? Icons.cloud_done : Icons.cloud_off,
+                  color: _isOnline ? Colors.green : Colors.red,
+                  size: 20,
+                ),
+                if (_isSyncing) ...[
+                  const SizedBox(width: 4),
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           // Manual sync button
           IconButton(
-            onPressed: _isOnline ? () => _syncAllData() : null,
+            onPressed: _isOnline && !_isSyncing ? () => _syncAllData() : null,
             icon: const Icon(Icons.sync, color: Colors.white),
+          ),
+          // Debug/Test buttons (remove in production)
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) async {
+              switch (value) {
+                case 'debug':
+                  await _debugDataSync();
+                  break;
+                case 'force_sync':
+                  await _syncAllData();
+                  break;
+                case 'test_create':
+                  await _testCreateDelivery();
+                  break;
+                case 'fix_db':
+                  await _fixDatabaseSchema();
+                  break;
+                case 'debug_table':
+                  final localService = LocalDeliveryDatabaseService();
+                  await localService.debugTableStructure();
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'debug',
+                child: Text('🔍 Debug Sync'),
+              ),
+              const PopupMenuItem(
+                value: 'force_sync',
+                child: Text('🔄 Force Sync'),
+              ),
+              const PopupMenuItem(
+                value: 'test_create',
+                child: Text('➕ Test Create'),
+              ),
+              const PopupMenuItem(
+                value: 'fix_db',
+                child: Text('🔧 Fix Database'),
+              ),
+              const PopupMenuItem(
+                value: 'debug_table',
+                child: Text('📊 Debug Table'),
+              ),
+            ],
           ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
@@ -196,10 +268,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
       backgroundColor: const Color(0xFF111111),
       body: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Tab switcher
             SlidingTabSwitcher(
               tabs: const ["Active", "History"],
               onTabSelected: (index) {
@@ -208,9 +279,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 });
               },
             ),
-            const SizedBox(height: 20),
-
-            // Content area using your custom widgets
+            const SizedBox(height: 24),
             Expanded(
               child: StreamBuilder<List<Delivery>>(
                 stream: _deliveryService.watchAllDeliveries(),
@@ -246,11 +315,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                   final deliveries = snapshot.data ?? [];
 
-                  // Debug output
                   print(
                       'StreamBuilder received ${deliveries.length} deliveries');
 
-                  // Filter deliveries based on tab
+                  // filter deliveries based on tab
                   final filteredDeliveries = isActiveTab
                       ? deliveries
                           .where((d) =>
@@ -263,7 +331,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               d.status?.toLowerCase() == 'cancelled')
                           .toList();
 
-                  // Use your custom tab widgets
                   return isActiveTab
                       ? ActiveTab(deliveries: filteredDeliveries)
                       : HistoryTab(deliveries: filteredDeliveries);
@@ -274,6 +341,81 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _testCreateDelivery() async {
+    try {
+      final testDelivery = Delivery(
+        deliveryId: '',
+        status: 'pending',
+        pickupLocation: 'Test Pickup ${DateTime.now().millisecond}',
+        deliveryLocation: 'Test Delivery ${DateTime.now().millisecond}',
+        dueDatetime: DateTime.now().add(const Duration(days: 1)),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      
+      await _deliveryService.createDelivery(testDelivery);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Test delivery created'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Test create failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Test create failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _fixDatabaseSchema() async {
+    try {
+      print('🔧 Fixing database schema...');
+      
+      // Show current structure
+      final localDeliveryService = LocalDeliveryDatabaseService();
+      await localDeliveryService.debugTableStructure();
+      
+      // Recreate the database with correct schema
+      await localDeliveryService.clearDatabaseAndRecreate();
+      
+      // Reinitialize services
+      _initializeServices();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Database schema fixed'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+      
+      // Force a sync to reload data
+      if (_isOnline) {
+        await _syncAllData();
+      }
+    } catch (e) {
+      print('❌ Error fixing database schema: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to fix database: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override

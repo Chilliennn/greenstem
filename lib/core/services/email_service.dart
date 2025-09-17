@@ -1,6 +1,4 @@
 import 'dart:math';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class EmailService {
@@ -41,9 +39,9 @@ class EmailService {
   /// Send actual email using Supabase Edge Function
   static Future<void> _sendActualEmail(String email, String code) async {
     try {
-      print('🔄 Attempting to send email to: $email');
-      print('📧 Verification code: $code');
-      
+      print('Attempting to send email to: $email');
+      print('Verification code: $code');
+
       final response = await _client.functions.invoke(
         'send-verification-email',
         body: {
@@ -53,23 +51,24 @@ class EmailService {
         },
       );
 
-      print('📊 Edge Function response status: ${response.status}');
-      print(' Edge Function response data: ${response.data}');
+      print('Edge Function response status: ${response.status}');
+      print('Edge Function response data: ${response.data}');
 
       if (response.status != 200) {
-        throw Exception('Edge Function failed with status ${response.status}: ${response.data}');
+        throw Exception(
+            'Edge Function failed with status ${response.status}: ${response.data}');
       }
 
-      print('✅ Verification email sent successfully to $email');
+      print('Verification email sent successfully to $email');
     } catch (e) {
-      print('❌ Email sending failed: $e');
-      
+      print('Email sending failed: $e');
+
       // For development, show the verification code in console
       print('=== DEVELOPMENT FALLBACK ===');
       print('To: $email');
       print('Verification Code: $code');
       print('============================');
-      
+
       // Re-throw the exception so the calling code knows it failed
       throw Exception('Failed to send email: $e');
     }

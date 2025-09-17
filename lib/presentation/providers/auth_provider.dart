@@ -98,40 +98,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final user = await _signInUseCase.call(params);
 
-      if (user != null) {
-        // Handle remember me functionality
-        if (_authStorage != null) {
-          await _authStorage!.setRememberMe(rememberMe);
+      // Handle remember me functionality
+      if (_authStorage != null) {
+        await _authStorage!.setRememberMe(rememberMe);
 
-          if (rememberMe) {
-            await _authStorage!
-                .saveLoginCredentials(params.username, params.password);
-            await _authStorage!.setAutoLogin(true);
-          } else {
-            await _authStorage!.clearAuthData();
-          }
-
-          // Update last login time
-          await _authStorage!.updateLastLoginTime();
-        }
-      }
-
-      if (user != null) {
-        // Login successful
-        state =
-            state.copyWith(isLoading: false, user: user, errorMessage: null);
-      } else {
-        // Login failed - clear any existing user and saved credentials if this was auto-login
-        if (isAutoLogin && _authStorage != null) {
+        if (rememberMe) {
+          await _authStorage!
+              .saveLoginCredentials(params.username, params.password);
+          await _authStorage!.setAutoLogin(true);
+        } else {
           await _authStorage!.clearAuthData();
         }
 
-        // Don't show error message for auto-login failures to avoid confusing users
-        final errorMsg = isAutoLogin ? null : 'Invalid username or password';
-        state = state.copyWith(
-            isLoading: false, user: null, errorMessage: errorMsg);
+        // Update last login time
+        await _authStorage!.updateLastLoginTime();
       }
-    } catch (e) {
+    
+      // Login successful
+      state =
+          state.copyWith(isLoading: false, user: user, errorMessage: null);
+        } catch (e) {
       // Login error - clear any existing user and saved credentials if this was auto-login
       if (isAutoLogin && _authStorage != null) {
         await _authStorage!.clearAuthData();

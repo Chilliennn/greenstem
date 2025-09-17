@@ -25,9 +25,9 @@ class _ActiveTabState extends State<ActiveTab> {
               color: Colors.grey,
             ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'No active deliveries',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
@@ -45,34 +45,61 @@ class _ActiveTabState extends State<ActiveTab> {
       );
     }
 
-    return Column(
+    // split deliveries into ongoing and incoming
+    final ongoingDeliveries = widget.deliveries
+        .where((d) => d.status?.toLowerCase() != "incoming")
+        .toList();
+
+    final incomingDeliveries = widget.deliveries
+        .where((d) => d.status?.toLowerCase() == "incoming" || d.status == null)
+        .toList();
+
+    return ListView(
+      padding: EdgeInsets.zero,
       children: [
-        const Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            "Incoming Job",
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
+        // ongoing section
+        if (ongoingDeliveries.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.only(left: 6, bottom: 6),
+            child: Text(
+              "Ongoing",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 16),
-        Expanded(
-          child: ListView.builder(
-            itemCount: widget.deliveries.length,
-            itemBuilder: (context, index) {
-              final delivery = widget.deliveries[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: ItemCard(
-                  state: delivery.status?.toLowerCase() ?? "incoming",
-                  delivery: delivery,
-                ),
-              );
-            },
+          for (final delivery in ongoingDeliveries)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: ItemCard(
+                state: delivery.status?.toLowerCase() ?? "",
+                delivery: delivery,
+              ),
+            ),
+        ],
+
+        // incoming section
+        if (incomingDeliveries.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.only(left: 6, top: 16, bottom: 6),
+            child: Text(
+              "Incoming Job",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
-        ),
+          for (final delivery in incomingDeliveries)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: ItemCard(
+                state: delivery.status?.toLowerCase() ?? "incoming",
+                delivery: delivery,
+              ),
+            ),
+        ],
       ],
     );
   }

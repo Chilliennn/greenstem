@@ -4,7 +4,7 @@ class Part {
   final String? description;
   final String? category;
   final DateTime createdAt;
-  final DateTime? updatedAt;
+  final DateTime updatedAt;
 
   const Part({
     required this.partId,
@@ -12,7 +12,7 @@ class Part {
     this.description,
     this.category,
     required this.createdAt,
-    this.updatedAt,
+    required this.updatedAt,
   });
 
   Part copyWith({
