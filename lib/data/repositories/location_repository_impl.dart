@@ -7,6 +7,10 @@ import '../models/location_model.dart';
 import '../../core/services/network_service.dart';
 import 'package:uuid/uuid.dart';
 
+extension _ListExtension<T> on List<T> {
+  T? get firstOrNull => isEmpty ? null : first;
+}
+
 class LocationRepositoryImpl implements LocationRepository {
   final LocalLocationDatabaseService _localDataSource;
   final RemoteLocationDataSource _remoteDataSource;
@@ -73,12 +77,38 @@ class LocationRepositoryImpl implements LocationRepository {
 
   Future<void> _syncRemoteToLocal(List<LocationModel> remoteLocations) async {
     try {
+      // Get all local locations
+      final localLocations = await _localDataSource.getAllLocations();
+      
+      // Create sets of IDs for comparison
+      final remoteIds = remoteLocations.map((l) => l.locationId).toSet();
+      final localIds = localLocations.map((l) => l.locationId).toSet();
+      
+      // Find locations that exist locally but not remotely (deleted remotely)
+      final deletedIds = localIds.difference(remoteIds);
+      
       int newCount = 0;
       int updatedCount = 0;
       int skippedCount = 0;
+      int deletedCount = 0;
 
+      // Handle deletions - remove local records that don't exist remotely
+      for (final deletedId in deletedIds) {
+        final localLocation = localLocations.firstWhere((l) => l.locationId == deletedId);
+        
+        // Only delete if the local record was previously synced
+        if (localLocation.isSynced) {
+          await _localDataSource.deleteLocation(deletedId);
+          deletedCount++;
+          print('🗑️ Deleted location $deletedId (removed from remote)');
+        }
+      }
+
+      // Handle updates and inserts
       for (final remoteLocation in remoteLocations) {
-        final localLocation = await _localDataSource.getLocationById(remoteLocation.locationId);
+        final localLocation = localLocations
+            .where((l) => l.locationId == remoteLocation.locationId)
+            .firstOrNull;
 
         if (localLocation == null) {
           // New location from remote
@@ -99,8 +129,8 @@ class LocationRepositoryImpl implements LocationRepository {
         }
       }
 
-      if (newCount > 0 || updatedCount > 0) {
-        print('✅ Remote→Local location sync: $newCount new, $updatedCount updated, $skippedCount skipped');
+      if (newCount > 0 || updatedCount > 0 || deletedCount > 0) {
+        print('✅ Remote→Local location sync: $newCount new, $updatedCount updated, $deletedCount deleted, $skippedCount skipped');
       }
     } catch (e) {
       print('❌ Remote→Local location sync failed: $e');

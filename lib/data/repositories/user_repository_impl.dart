@@ -7,6 +7,10 @@ import '../datasources/remote/remote_user_datasource.dart';
 import '../models/user_model.dart';
 import '../../core/services/network_service.dart';
 
+extension _ListExtension<T> on List<T> {
+  T? get firstOrNull => isEmpty ? null : first;
+}
+
 class UserRepositoryImpl implements UserRepository {
   final LocalUserDatabaseService _localDataSource;
   final RemoteUserDataSource _remoteDataSource;
@@ -73,12 +77,38 @@ class UserRepositoryImpl implements UserRepository {
 
   Future<void> _syncRemoteToLocal(List<UserModel> remoteUsers) async {
     try {
+      // Get all local users
+      final localUsers = await _localDataSource.getAllUsers();
+      
+      // Create sets of IDs for comparison
+      final remoteIds = remoteUsers.map((u) => u.userId).toSet();
+      final localIds = localUsers.map((u) => u.userId).toSet();
+      
+      // Find users that exist locally but not remotely (deleted remotely)
+      final deletedIds = localIds.difference(remoteIds);
+      
       int newCount = 0;
       int updatedCount = 0;
       int skippedCount = 0;
+      int deletedCount = 0;
 
+      // Handle deletions - remove local records that don't exist remotely
+      for (final deletedId in deletedIds) {
+        final localUser = localUsers.firstWhere((u) => u.userId == deletedId);
+        
+        // Only delete if the local record was previously synced and is not the current user
+        if (localUser.isSynced && !localUser.isCurrentUser) {
+          await _localDataSource.deleteUser(deletedId);
+          deletedCount++;
+          print('🗑️ Deleted user $deletedId (removed from remote)');
+        }
+      }
+
+      // Handle updates and inserts
       for (final remoteUser in remoteUsers) {
-        final localUser = await _localDataSource.getUserById(remoteUser.userId);
+        final localUser = localUsers
+            .where((u) => u.userId == remoteUser.userId)
+            .firstOrNull;
 
         if (localUser == null) {
           // New user from remote
@@ -90,6 +120,7 @@ class UserRepositoryImpl implements UserRepository {
             final syncedUser = remoteUser.copyWith(
               isSynced: true,
               needsSync: false,
+              isCurrentUser: localUser.isCurrentUser, // Preserve current user status
             );
             await _localDataSource.insertOrUpdateUser(syncedUser);
             updatedCount++;
@@ -99,8 +130,8 @@ class UserRepositoryImpl implements UserRepository {
         }
       }
 
-      if (newCount > 0 || updatedCount > 0) {
-        print('✅ Remote→Local user sync: $newCount new, $updatedCount updated, $skippedCount skipped');
+      if (newCount > 0 || updatedCount > 0 || deletedCount > 0) {
+        print('✅ Remote→Local user sync: $newCount new, $updatedCount updated, $deletedCount deleted, $skippedCount skipped');
       }
     } catch (e) {
       print('❌ Remote→Local user sync failed: $e');
@@ -147,60 +178,62 @@ class UserRepositoryImpl implements UserRepository {
   @override
   Future<User?> login(String username, String password) async {
     try {
-      // Try local first
-      var userModel = await _localDataSource.getUserByUsername(username);
-      userModel ??= await _localDataSource.getUserByEmail(username);
-
-      if (userModel != null && userModel.password == password) {
-        await _localDataSource.setCurrentUser(userModel.userId);
-        return userModel.toEntity().toPublicUser();
-      }
-
-      // Try remote if local fails
+      // Try remote login first
       if (await hasNetworkConnection()) {
-        userModel = await _remoteDataSource.login(username, password);
-        if (userModel != null) {
-          // Save to local and set as current
-          final localUser = userModel.copyWith(
-            isCurrentUser: true,
+        final remoteUser = await _remoteDataSource.login(username, password);
+        if (remoteUser != null) {
+          // Save user locally and mark as current user
+          final localUser = remoteUser.copyWith(
             isSynced: true,
             needsSync: false,
+            isCurrentUser: true,
           );
           await _localDataSource.insertOrUpdateUser(localUser);
-          await _localDataSource.setCurrentUser(userModel.userId);
-          return userModel.toEntity().toPublicUser();
+          await _localDataSource.setCurrentUser(remoteUser.userId);
+          return localUser.toEntity().toPublicUser();
         }
+      }
+
+      // Fallback to local login if remote fails or no network
+      final localUser = await _localDataSource.getUserByUsername(username);
+      if (localUser != null && localUser.password == password) {
+        await _localDataSource.setCurrentUser(localUser.userId);
+        return localUser.toEntity().toPublicUser();
       }
 
       return null;
     } catch (e) {
-      throw Exception('Failed to login: $e');
+      print('❌ Login error: $e');
+      throw Exception('Login failed: $e');
     }
   }
 
   @override
   Future<User> register(User user) async {
     try {
-      final userWithId = user.userId.isEmpty
-          ? user.copyWith(
-              userId: const Uuid().v4(),
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
-            )
-          : user.copyWith(
-              updatedAt: DateTime.now(),
-            );
+      final userWithTimestamp = user.copyWith(
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      // Generate ID if not provided
+      final uuid = const Uuid();
+      final userWithId = userWithTimestamp.userId.isEmpty
+          ? userWithTimestamp.copyWith(userId: uuid.v4())
+          : userWithTimestamp;
 
       // Save locally first (offline-first)
       final model = UserModel.fromEntity(
         userWithId,
         isSynced: false,
         needsSync: true,
+        isCurrentUser: true,
         version: 1,
       );
 
       final savedModel = await _localDataSource.insertUser(model);
-      print('✅ Created user locally: ${savedModel.userId}');
+      await _localDataSource.setCurrentUser(savedModel.userId);
+      print('✅ Registered user locally: ${savedModel.userId}');
 
       return savedModel.toEntity();
     } catch (e) {
@@ -212,6 +245,7 @@ class UserRepositoryImpl implements UserRepository {
   Future<void> logout() async {
     try {
       await _localDataSource.clearCurrentUser();
+      print('✅ User logged out locally');
     } catch (e) {
       throw Exception('Failed to logout: $e');
     }
@@ -223,18 +257,31 @@ class UserRepositoryImpl implements UserRepository {
       final userModel = await _localDataSource.getCurrentUser();
       return userModel?.toEntity().toPublicUser();
     } catch (e) {
-      throw Exception('Failed to get current user: $e');
+      print('❌ Error getting current user: $e');
+      return null;
     }
   }
 
   @override
   Future<User> createUser(User user) async {
     try {
-      final userWithId = user.userId.isEmpty
-          ? user.copyWith(userId: const Uuid().v4())
-          : user;
+      final userWithTimestamp = user.copyWith(
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
 
-      final model = UserModel.fromEntity(userWithId);
+      final uuid = const Uuid();
+      final userWithId = userWithTimestamp.userId.isEmpty
+          ? userWithTimestamp.copyWith(userId: uuid.v4())
+          : userWithTimestamp;
+
+      final model = UserModel.fromEntity(
+        userWithId,
+        isSynced: false,
+        needsSync: true,
+        version: 1,
+      );
+
       final savedModel = await _localDataSource.insertUser(model);
       return savedModel.toEntity();
     } catch (e) {
@@ -246,17 +293,14 @@ class UserRepositoryImpl implements UserRepository {
   Future<User> updateUser(User user) async {
     try {
       final updatedUser = user.copyWith(updatedAt: DateTime.now());
-
-      // Update locally first
       final existingModel = await _localDataSource.getUserById(user.userId);
       final model = UserModel.fromEntity(
         updatedUser,
         version: (existingModel?.version ?? 0) + 1,
+        isCurrentUser: existingModel?.isCurrentUser ?? false,
       );
 
       final savedModel = await _localDataSource.updateUser(model);
-      print('✅ Updated user locally: ${savedModel.userId} (v${savedModel.version})');
-
       return savedModel.toEntity();
     } catch (e) {
       throw Exception('Failed to update user: $e');
@@ -266,11 +310,9 @@ class UserRepositoryImpl implements UserRepository {
   @override
   Future<void> deleteUser(String userId) async {
     try {
-      // Delete locally first
       await _localDataSource.deleteUser(userId);
       print('✅ Deleted user locally: $userId');
 
-      // Try to delete remotely if connected
       if (await hasNetworkConnection()) {
         try {
           await _remoteDataSource.deleteUser(userId);
@@ -368,11 +410,9 @@ class UserRepositoryImpl implements UserRepository {
           final remoteUser = await _remoteDataSource.getUserById(user.userId);
 
           if (remoteUser == null) {
-            // Create new user remotely
             await _remoteDataSource.createUser(user);
             print('➕ Created user ${user.userId} remotely');
           } else {
-            // Check if local version is newer (LWW)
             if (user.isNewerThan(remoteUser)) {
               await _remoteDataSource.updateUser(user);
               print('🔄 Updated user ${user.userId} remotely (LWW)');
@@ -381,7 +421,6 @@ class UserRepositoryImpl implements UserRepository {
             }
           }
 
-          // Mark as synced locally
           await _localDataSource.markAsSynced(user.userId);
         } catch (e) {
           print('❌ Failed to sync user ${user.userId}: $e');
@@ -418,7 +457,7 @@ class UserRepositoryImpl implements UserRepository {
   @override
   Future<List<User>> getCachedUsers() async {
     final models = await _localDataSource.getAllUsers();
-    return models.map((model) => model.toEntity()).toList();
+    return models.map((model) => model.toEntity().toPublicUser()).toList();
   }
 
   @override
@@ -428,8 +467,30 @@ class UserRepositoryImpl implements UserRepository {
 
   @override
   Future<void> resetPassword(String email, String newPassword) async {
-    // Implementation for password reset
-    throw UnimplementedError();
+    try {
+      if (await hasNetworkConnection()) {
+        // Update password remotely first
+        final remoteUser = await _remoteDataSource.getUserByEmail(email);
+        if (remoteUser != null) {
+          await _remoteDataSource.updatePassword(remoteUser.userId, newPassword);
+          
+          // Update locally if user exists
+          final localUser = await _localDataSource.getUserByEmail(email);
+          if (localUser != null) {
+            final updatedUser = localUser.copyWith(
+              password: newPassword,
+              updatedAt: DateTime.now(),
+              version: localUser.version + 1,
+              isSynced: true,
+              needsSync: false,
+            );
+            await _localDataSource.updateUser(updatedUser);
+          }
+        }
+      }
+    } catch (e) {
+      throw Exception('Failed to reset password: $e');
+    }
   }
 
   void dispose() {

@@ -6,6 +6,10 @@ import '../../domain/params/sign_up_params.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../domain/repositories/user_repository.dart';
 
+extension _ListExtension<T> on List<T> {
+  T? get firstOrNull => isEmpty ? null : first;
+}
+
 class AuthRepositoryImpl implements AuthRepository {
   final UserRepository _userRepository;
 

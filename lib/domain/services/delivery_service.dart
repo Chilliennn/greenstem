@@ -66,6 +66,15 @@ class DeliveryService {
     return await updateDelivery(updatedDelivery);
   }
 
+  // Add the missing getCachedDeliveries method
+  Future<List<Delivery>> getCachedDeliveries() async {
+    try {
+      return await _repository.getCachedDeliveries();
+    } catch (e) {
+      throw Exception('Failed to get cached deliveries: $e');
+    }
+  }
+
   // Sync operations
   Future<void> syncData() async {
     try {

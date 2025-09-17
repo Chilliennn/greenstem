@@ -96,10 +96,16 @@ class LocalUserDatabaseService {
   Future<void> _loadUsers() async {
     try {
       final users = await getAllUsers();
-      _usersController.add(users);
+      // Check if controller is still active before adding events
+      if (!_usersController.isClosed) {
+        _usersController.add(users);
+      }
     } catch (e) {
-      print('Error loading users: $e');
-      _usersController.add([]);
+      print('❌ Error loading users: $e');
+      // Only add error if controller is still active
+      if (!_usersController.isClosed) {
+        _usersController.addError(e);
+      }
     }
   }
 

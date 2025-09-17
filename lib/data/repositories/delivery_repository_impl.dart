@@ -7,6 +7,10 @@ import '../datasources/remote/remote_delivery_datasource.dart';
 import '../models/delivery_model.dart';
 import '../../core/services/network_service.dart';
 
+extension _ListExtension<T> on List<T> {
+  T? get firstOrNull => isEmpty ? null : first;
+}
+
 class DeliveryRepositoryImpl implements DeliveryRepository {
   final LocalDeliveryDatabaseService _localDataSource;
   final RemoteDeliveryDataSource _remoteDataSource;
@@ -29,11 +33,12 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
   Future<void> _initInitialSync() async {
     if (await hasNetworkConnection()) {
       try {
-        print('🔄 Initial sync: Fetching data from remote...');
+        print('🔄 Initial delivery sync: Fetching data from remote...');
         await syncFromRemote();
-        print('✅ Initial sync completed');
+        await syncToRemote();
+        print('✅ Initial delivery sync completed');
       } catch (e) {
-        print('❌ Initial sync failed: $e');
+        print('❌ Initial delivery sync failed: $e');
       }
     }
   }
@@ -43,12 +48,12 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
     _remoteSubscription = _remoteDataSource.watchAllDeliveries().listen(
       (remoteDeliveries) async {
         if (await hasNetworkConnection()) {
-          print('📡 Remote changes detected, syncing to local...');
+          print('📡 Remote delivery changes detected, syncing to local...');
           await _syncRemoteToLocal(remoteDeliveries);
         }
       },
       onError: (error) {
-        print('❌ Remote sync error: $error');
+        print('❌ Remote delivery sync error: $error');
       },
     );
 
@@ -59,26 +64,51 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
         localSyncDebounce?.cancel();
         localSyncDebounce = Timer(const Duration(seconds: 2), () async {
           if (await hasNetworkConnection()) {
-            print('📱 Local changes detected, syncing to remote...');
+            print('📱 Local delivery changes detected, syncing to remote...');
             await syncToRemote();
           }
         });
       },
       onError: (error) {
-        print('❌ Local sync error: $error');
+        print('❌ Local delivery sync error: $error');
       },
     );
   }
 
   Future<void> _syncRemoteToLocal(List<DeliveryModel> remoteDeliveries) async {
     try {
+      // Get all local deliveries
+      final localDeliveries = await _localDataSource.getAllDeliveries();
+      
+      // Create sets of IDs for comparison
+      final remoteIds = remoteDeliveries.map((d) => d.deliveryId).toSet();
+      final localIds = localDeliveries.map((d) => d.deliveryId).toSet();
+      
+      // Find deliveries that exist locally but not remotely (deleted remotely)
+      final deletedIds = localIds.difference(remoteIds);
+      
       int newCount = 0;
       int updatedCount = 0;
       int skippedCount = 0;
+      int deletedCount = 0;
 
+      // Handle deletions - remove local records that don't exist remotely
+      for (final deletedId in deletedIds) {
+        final localDelivery = localDeliveries.firstWhere((d) => d.deliveryId == deletedId);
+        
+        // Only delete if the local record was previously synced (to avoid deleting local-only changes)
+        if (localDelivery.isSynced) {
+          await _localDataSource.deleteDelivery(deletedId);
+          deletedCount++;
+          print('🗑️ Deleted delivery $deletedId (removed from remote)');
+        }
+      }
+
+      // Handle updates and inserts
       for (final remoteDelivery in remoteDeliveries) {
-        final localDelivery =
-            await _localDataSource.getDeliveryById(remoteDelivery.deliveryId);
+        final localDelivery = localDeliveries
+            .where((d) => d.deliveryId == remoteDelivery.deliveryId)
+            .firstOrNull;
 
         if (localDelivery == null) {
           // New delivery from remote
@@ -99,12 +129,11 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
         }
       }
 
-      if (newCount > 0 || updatedCount > 0) {
-        print(
-            '✅ Remote→Local sync: $newCount new, $updatedCount updated, $skippedCount skipped');
+      if (newCount > 0 || updatedCount > 0 || deletedCount > 0) {
+        print('✅ Remote→Local delivery sync: $newCount new, $updatedCount updated, $deletedCount deleted, $skippedCount skipped');
       }
     } catch (e) {
-      print('❌ Remote→Local sync failed: $e');
+      print('❌ Remote→Local delivery sync failed: $e');
     }
   }
 
@@ -114,7 +143,7 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
         await syncFromRemote();
         await syncToRemote();
       } catch (e) {
-        print('❌ Background sync failed: $e');
+        print('❌ Background delivery sync failed: $e');
       }
     }
   }
@@ -122,8 +151,8 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
   @override
   Stream<List<Delivery>> watchAllDeliveries() {
     return _localDataSource.watchAllDeliveries().map(
-          (models) => models.map((model) => model.toEntity()).toList(),
-        );
+      (models) => models.map((model) => model.toEntity()).toList(),
+    );
   }
 
   @override
@@ -143,15 +172,16 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
   @override
   Future<Delivery> createDelivery(Delivery delivery) async {
     try {
-      final deliveryWithId = delivery.deliveryId.isEmpty
-          ? delivery.copyWith(
-              deliveryId: const Uuid().v4(),
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
-            )
-          : delivery.copyWith(
-              updatedAt: DateTime.now(),
-            );
+      final deliveryWithTimestamp = delivery.copyWith(
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      // Generate ID if not provided
+      final uuid = const Uuid();
+      final deliveryWithId = deliveryWithTimestamp.deliveryId.isEmpty
+          ? deliveryWithTimestamp.copyWith(deliveryId: uuid.v4())
+          : deliveryWithTimestamp;
 
       // Save locally first (offline-first)
       final model = DeliveryModel.fromEntity(
@@ -175,17 +205,15 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
     try {
       final updatedDelivery = delivery.copyWith(updatedAt: DateTime.now());
 
-      // Update locally first (this will increment version and set needsSync)
-      final existingModel =
-          await _localDataSource.getDeliveryById(delivery.deliveryId);
+      // Update locally first
+      final existingModel = await _localDataSource.getDeliveryById(delivery.deliveryId);
       final model = DeliveryModel.fromEntity(
         updatedDelivery,
         version: (existingModel?.version ?? 0) + 1,
       );
 
       final savedModel = await _localDataSource.updateDelivery(model);
-      print(
-          '✅ Updated delivery locally: ${savedModel.deliveryId} (v${savedModel.version})');
+      print('✅ Updated delivery locally: ${savedModel.deliveryId} (v${savedModel.version})');
 
       return savedModel.toEntity();
     } catch (e) {
@@ -207,6 +235,7 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
           print('✅ Deleted delivery remotely: $id');
         } catch (e) {
           print('❌ Failed to delete delivery remotely: $e');
+          // Note: In a production app, you might want to queue this for later retry
         }
       }
     } catch (e) {
@@ -217,23 +246,19 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
   @override
   Future<void> syncToRemote() async {
     if (!await hasNetworkConnection()) {
-      print('⚠️ No network connection for sync to remote');
+      print('⚠️ No network connection for delivery sync to remote');
       return;
     }
 
     try {
       final unsyncedDeliveries = await _localDataSource.getUnsyncedDeliveries();
-      if (unsyncedDeliveries.isEmpty) {
-        return;
-      }
+      if (unsyncedDeliveries.isEmpty) return;
 
-      print(
-          '📤 Syncing ${unsyncedDeliveries.length} local changes to remote...');
+      print('📤 Syncing ${unsyncedDeliveries.length} local delivery changes to remote...');
 
       for (final delivery in unsyncedDeliveries) {
         try {
-          final remoteDelivery =
-              await _remoteDataSource.getDeliveryById(delivery.deliveryId);
+          final remoteDelivery = await _remoteDataSource.getDeliveryById(delivery.deliveryId);
 
           if (remoteDelivery == null) {
             // Create new delivery remotely
@@ -243,11 +268,9 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
             // Check if local version is newer (LWW)
             if (delivery.isNewerThan(remoteDelivery)) {
               await _remoteDataSource.updateDelivery(delivery);
-              print(
-                  '🔄 Updated delivery ${delivery.deliveryId} remotely (LWW)');
+              print('🔄 Updated delivery ${delivery.deliveryId} remotely (LWW)');
             } else {
-              print(
-                  '⏭️ Skipped delivery ${delivery.deliveryId} (remote is newer)');
+              print('⏭️ Skipped delivery ${delivery.deliveryId} (remote is newer)');
             }
           }
 
@@ -258,9 +281,9 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
         }
       }
 
-      print('✅ Local→Remote sync completed');
+      print('✅ Local→Remote delivery sync completed');
     } catch (e) {
-      print('❌ Local→Remote sync failed: $e');
+      print('❌ Local→Remote delivery sync failed: $e');
       throw Exception('Failed to sync to remote: $e');
     }
   }
@@ -268,17 +291,16 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
   @override
   Future<void> syncFromRemote() async {
     if (!await hasNetworkConnection()) {
-      print('⚠️ No network connection for sync from remote');
+      print('⚠️ No network connection for delivery sync from remote');
       return;
     }
 
     try {
-      print('📥 Syncing from remote to local...');
-
+      print('📥 Syncing deliveries from remote to local...');
       final remoteDeliveries = await _remoteDataSource.getAllDeliveries();
       await _syncRemoteToLocal(remoteDeliveries);
     } catch (e) {
-      print('❌ Sync from remote failed: $e');
+      print('❌ Delivery sync from remote failed: $e');
       throw Exception('Failed to sync from remote: $e');
     }
   }
@@ -301,7 +323,14 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
     _syncTimer?.cancel();
     _remoteSubscription?.cancel();
     _localSubscription?.cancel();
+    
+    // Dispose data sources
     _localDataSource.dispose();
     _remoteDataSource.dispose();
+    
+    // Clear references
+    _syncTimer = null;
+    _remoteSubscription = null;
+    _localSubscription = null;
   }
 }

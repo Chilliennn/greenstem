@@ -33,8 +33,19 @@ class LocalDeliveryDatabaseService {
   }
 
   Future<void> _loadDeliveries() async {
-    final deliveries = await getAllDeliveries();
-    _deliveriesController.add(deliveries);
+    try {
+      final deliveries = await getAllDeliveries();
+      // Check if controller is still active before adding events
+      if (!_deliveriesController.isClosed) {
+        _deliveriesController.add(deliveries);
+      }
+    } catch (e) {
+      print('❌ Error loading deliveries: $e');
+      // Only add error if controller is still active
+      if (!_deliveriesController.isClosed) {
+        _deliveriesController.addError(e);
+      }
+    }
   }
 
   // CRUD operations
@@ -63,7 +74,7 @@ class LocalDeliveryDatabaseService {
   Future<DeliveryModel> insertOrUpdateDelivery(DeliveryModel delivery) async {
     final db = await database;
     final existing = await getDeliveryById(delivery.deliveryId);
-    
+
     if (existing != null) {
       // Use Last-Write Wins strategy
       if (delivery.isNewerThan(existing)) {
@@ -90,7 +101,7 @@ class LocalDeliveryDatabaseService {
 
   Future<DeliveryModel> insertDelivery(DeliveryModel delivery) async {
     final db = await database;
-    await db.insert(_tableName, delivery.toJson(), 
+    await db.insert(_tableName, delivery.toJson(),
         conflictAlgorithm: ConflictAlgorithm.replace);
 
     _loadDeliveries();
@@ -99,7 +110,7 @@ class LocalDeliveryDatabaseService {
 
   Future<DeliveryModel> updateDelivery(DeliveryModel delivery) async {
     final db = await database;
-    
+
     // Increment version for local updates
     final updatedDelivery = delivery.copyWith(
       version: delivery.version + 1,
@@ -107,7 +118,7 @@ class LocalDeliveryDatabaseService {
       needsSync: true,
       isSynced: false,
     );
-    
+
     await db.update(
       _tableName,
       updatedDelivery.toJson(),
