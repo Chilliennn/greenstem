@@ -79,6 +79,13 @@ class LocalDeliveryPartDatabaseService {
     }
   }
 
+  Stream<List<DeliveryPartModel>> watchDeliveryPartsByPartId(String partId) async* {
+    _loadDeliveryParts();
+    await for (final deliveryParts in _deliveryPartsController.stream) {
+      yield deliveryParts.where((dp) => dp.partId == partId).toList();
+    }
+  }
+
   Stream<DeliveryPartModel?> watchDeliveryPartByDeliveryId(String deliveryId) async* {
     _loadDeliveryParts();
     await for (final deliveryParts in _deliveryPartsController.stream) {
@@ -178,6 +185,25 @@ class LocalDeliveryPartDatabaseService {
     final db = await database;
     await db.delete(_tableName);
     _loadDeliveryParts();
+  }
+
+  Future<void> deleteDeliveryPartsByDeliveryId(String deliveryId) async {
+    final db = await database;
+    try {
+      await db.delete(
+        _tableName,
+        where: 'delivery_id = ?',
+        whereArgs: [deliveryId],
+      );
+      
+      print('✅ Deleted all delivery parts for delivery $deliveryId locally');
+      if (!_deliveryPartsController.isClosed) {
+        _loadDeliveryParts();
+      }
+    } catch (e) {
+      print('❌ Error deleting delivery parts for delivery $deliveryId: $e');
+      throw Exception('Failed to delete delivery parts locally: $e');
+    }
   }
 
   void dispose() {

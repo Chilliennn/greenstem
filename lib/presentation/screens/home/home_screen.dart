@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:greenstem/data/datasources/local/local_location_database_service.dart';
+import 'package:greenstem/data/datasources/remote/remote_location_datasource.dart';
+import 'package:greenstem/data/repositories/location_repository_impl.dart';
 import 'package:greenstem/domain/entities/delivery.dart';
+import 'package:greenstem/domain/services/location_service.dart';
 import '../../../presentation/widgets/home/active_tab.dart';
 import '../../../presentation/widgets/home/history_tab.dart';
 import '../../../presentation/widgets/home/sliding_tab_switcher.dart';
@@ -27,8 +31,10 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   late final DeliveryService _deliveryService;
   late final UserService _userService;
+  late final LocationService _locationService;
   late final DeliveryRepositoryImpl _deliveryRepository;
   late final UserRepositoryImpl _userRepository;
+  late final LocationRepositoryImpl _locationRepository; // Add this line
 
   bool _isOnline = false;
   User? _currentUser;
@@ -81,12 +87,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _initializeServices() {
-    // delivery services
+    // location services (initialize first)
+    final localLocationDataSource = LocalLocationDatabaseService();
+    final remoteLocationDataSource = SupabaseLocationDataSource();
+    _locationRepository = LocationRepositoryImpl(
+        localLocationDataSource, remoteLocationDataSource);
+    _locationService = LocationService(_locationRepository);
+
+    // delivery services (pass location repository)
     final localDeliveryDataSource = LocalDeliveryDatabaseService();
     final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
     _deliveryRepository = DeliveryRepositoryImpl(
         localDeliveryDataSource, remoteDeliveryDataSource);
-    _deliveryService = DeliveryService(_deliveryRepository);
+    _deliveryService = DeliveryService(_deliveryRepository, _locationRepository); // Pass location repository here
 
     // user services
     final localUserDataSource = LocalUserDatabaseService();
@@ -256,8 +269,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           .toList();
 
                   return isActiveTab
-                      ? ActiveTab(deliveries: filteredDeliveries)
-                      : HistoryTab(deliveries: filteredDeliveries);
+                      ? ActiveTab(
+                          deliveries: filteredDeliveries,
+                          deliveryService: _deliveryService,
+                        )
+                      : HistoryTab(
+                          deliveries: filteredDeliveries,
+                          deliveryService: _deliveryService,
+                        );
                 },
               ),
             ),

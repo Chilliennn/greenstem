@@ -9,6 +9,7 @@ abstract class RemoteDeliveryPartDataSource {
   Future<DeliveryPartModel> createDeliveryPart(DeliveryPartModel deliveryPart);
   Future<DeliveryPartModel> updateDeliveryPart(DeliveryPartModel deliveryPart);
   Future<void> deleteDeliveryPart(String deliveryId);
+  Future<void> deleteDeliveryPartsByDeliveryId(String deliveryId);
   Stream<List<DeliveryPartModel>> watchAllDeliveryParts();
   void dispose();
 }
@@ -169,6 +170,21 @@ class SupabaseDeliveryPartDataSource implements RemoteDeliveryPartDataSource {
     } catch (e) {
       print('❌ Error deleting delivery part: $e');
       throw Exception('Failed to delete delivery part: $e');
+    }
+  }
+
+  @override
+  Future<void> deleteDeliveryPartsByDeliveryId(String deliveryId) async {
+    try {
+      await _client
+          .from('delivery_part')
+          .delete()
+          .eq('delivery_id', deliveryId);
+      
+      print('✅ Deleted all delivery parts for delivery $deliveryId from Supabase');
+    } catch (e) {
+      print('❌ Error deleting delivery parts for delivery $deliveryId: $e');
+      throw Exception('Failed to delete delivery parts: $e');
     }
   }
 

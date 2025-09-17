@@ -1,5 +1,11 @@
+import 'dart:math' as math;
 import '../entities/location.dart';
 import '../repositories/location_repository.dart';
+
+// Add this extension
+extension _ListExtension<T> on List<T> {
+  T? get firstOrNull => isEmpty ? null : first;
+}
 
 class LocationService {
   final LocationRepository _repository;
@@ -149,15 +155,15 @@ class LocationService {
     // Haversine formula for calculating distance between two points on Earth
     const double earthRadiusKm = 6371.0;
     
-    final lat1Rad = location1.latitude! * (3.14159265359 / 180);
-    final lat2Rad = location2.latitude! * (3.14159265359 / 180);
-    final deltaLatRad = (location2.latitude! - location1.latitude!) * (3.14159265359 / 180);
-    final deltaLonRad = (location2.longitude! - location1.longitude!) * (3.14159265359 / 180);
+    final lat1Rad = location1.latitude! * (math.pi / 180);
+    final lat2Rad = location2.latitude! * (math.pi / 180);
+    final deltaLatRad = (location2.latitude! - location1.latitude!) * (math.pi / 180);
+    final deltaLonRad = (location2.longitude! - location1.longitude!) * (math.pi / 180);
 
-    final a = (deltaLatRad / 2).sin() * (deltaLatRad / 2).sin() +
-        lat1Rad.cos() * lat2Rad.cos() *
-        (deltaLonRad / 2).sin() * (deltaLonRad / 2).sin();
-    final c = 2 * (a.sqrt()).asin();
+    final a = math.pow(math.sin(deltaLatRad / 2), 2) +
+        math.cos(lat1Rad) * math.cos(lat2Rad) *
+        math.pow(math.sin(deltaLonRad / 2), 2);
+    final c = 2 * math.asin(math.sqrt(a));
 
     return earthRadiusKm * c;
   }
@@ -184,7 +190,7 @@ class LocationService {
     }
 
     // Sort by distance and return the nearest ones
-    locationsWithDistances.sort((a, b) => a['distance'].compareTo(b['distance']));
+    locationsWithDistances.sort((a, b) => (a['distance'] as double).compareTo(b['distance'] as double));
     
     return locationsWithDistances
         .take(limit)
