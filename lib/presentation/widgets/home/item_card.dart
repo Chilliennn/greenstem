@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:greenstem/domain/entities/delivery.dart';
+import 'package:greenstem/presentation/screens/profiles/profile_screen.dart';
 import 'package:intl/intl.dart';
 import '../../../domain/services/delivery_service.dart';
 
@@ -241,159 +242,168 @@ class _StatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: Color(0xFF1D1D1D),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Icon(
-                  Icons.inbox_rounded,
-                  color: label == 'Awaiting'
-                      ? Color(0xFFFEA41D)
-                      : label == 'Picked up'
-                          ? Color(0xFF4B97FA)
-                          : label == 'En Route'
-                              ? Color(0xFFC084FC)
-                              : Color(0xFF00B65E),
-                  size: 32,
-                ),
-                Text(
-                  label,
-                  style: TextStyle(
-                      color: label == 'Awaiting'
-                          ? Color(0xFFFEA41D)
-                          : label == 'Picked up'
-                              ? Color(0xFF4B97FA)
-                              : label == 'En Route'
-                                  ? Color(0xFFC084FC)
-                                  : Color(0xFF00B65E),
-                      fontWeight: FontWeight.w800),
-                )
-              ],
-            ),
-            if (delivery != null) ...[
-              SizedBox(height: 8),
-              Text(
-                label == 'Awaiting'
-                    ? 'Pick up from'
-                    : label == 'Picked up'
-                        ? 'Deliver to'
-                        : label == 'En Route'
-                            ? 'Delivering to'
-                            : 'Delivered to',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-              SizedBox(
-                height: 4,
-              ),
+    return GestureDetector(
+      // TODO: waiting delivery_detail_screen.dart to be implemented
+      // onTap: () async => await Navigator.push(
+      //   context,
+      //   MaterialPageRoute(builder: (context) => const ProfileScreen()),
+      // ),
+      child: Card(
+        color: Color(0xFF1D1D1D),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  FutureBuilder<String>(
-                    future: deliveryService?.getLocationName(
-                          label == 'Awaiting'
-                              ? delivery?.pickupLocation
-                              : delivery?.deliveryLocation,
-                        ) ??
-                        Future.value(
-                          label == 'Awaiting'
-                              ? delivery?.pickupLocation ?? 'Unknown'
-                              : delivery?.deliveryLocation ?? 'Unknown',
-                        ),
-                    builder: (context, snapshot) {
-                      return Text(
-                        snapshot.data ??
-                            (label == 'Awaiting'
-                                ? delivery?.pickupLocation ?? 'Unknown'
-                                : delivery?.deliveryLocation ?? 'Unknown'),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      );
-                    },
+                  Icon(
+                    Icons.inbox_rounded,
+                    color: label == 'Awaiting'
+                        ? Color(0xFFFEA41D)
+                        : label == 'Picked up'
+                            ? Color(0xFF4B97FA)
+                            : label == 'En Route'
+                                ? Color(0xFFC084FC)
+                                : Color(0xFF00B65E),
+                    size: 32,
                   ),
-                ],
-              ),
-              SizedBox(
-                height: 20,
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        spacing: 8,
-                        children: [
-                          Icon(
-                            Icons.shopping_bag_outlined,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                          Text(
-                            "n items",
-                            style: TextStyle(color: Colors.grey, fontSize: 12),
-                          )
-                        ],
-                      ),
-                      SizedBox(
-                        height: 6,
-                      ),
-                      Row(
-                        spacing: 8,
-                        children: [
-                          Icon(
-                            Icons.location_on_rounded,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                          Text(
-                            "n km",
-                            style: TextStyle(color: Colors.grey, fontSize: 12),
-                          )
-                        ],
-                      )
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    spacing: 4,
-                    children: [
-                      label == 'Delivered'
-                          ? Align(
-                              alignment: Alignment.topRight,
-                              child: Text(
-                                'Delivered at',
-                                style: TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600),
-                              ),
-                            )
-                          : Container(),
-                      Align(
-                        alignment: Alignment.bottomRight,
-                        child: Text(
-                          '${label == 'Delivered' ? '' : 'Due '}${DateFormat("dd MMM yyyy - hh:mm a").format(delivery!.dueDatetime!)}',
-                          style: TextStyle(color: Colors.grey, fontSize: 12),
-                        ),
-                      ),
-                    ],
+                  Text(
+                    label,
+                    style: TextStyle(
+                        color: label == 'Awaiting'
+                            ? Color(0xFFFEA41D)
+                            : label == 'Picked up'
+                                ? Color(0xFF4B97FA)
+                                : label == 'En Route'
+                                    ? Color(0xFFC084FC)
+                                    : Color(0xFF00B65E),
+                        fontWeight: FontWeight.w800),
                   )
                 ],
-              )
+              ),
+              if (delivery != null) ...[
+                SizedBox(height: 8),
+                Text(
+                  label == 'Awaiting'
+                      ? 'Pick up from'
+                      : label == 'Picked up'
+                          ? 'Deliver to'
+                          : label == 'En Route'
+                              ? 'Delivering to'
+                              : 'Delivered to',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                SizedBox(
+                  height: 4,
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    FutureBuilder<String>(
+                      future: deliveryService?.getLocationName(
+                            label == 'Awaiting'
+                                ? delivery?.pickupLocation
+                                : delivery?.deliveryLocation,
+                          ) ??
+                          Future.value(
+                            label == 'Awaiting'
+                                ? delivery?.pickupLocation ?? 'Unknown'
+                                : delivery?.deliveryLocation ?? 'Unknown',
+                          ),
+                      builder: (context, snapshot) {
+                        return Text(
+                          snapshot.data ??
+                              (label == 'Awaiting'
+                                  ? delivery?.pickupLocation ?? 'Unknown'
+                                  : delivery?.deliveryLocation ?? 'Unknown'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                SizedBox(
+                  height: 20,
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          spacing: 8,
+                          children: [
+                            Icon(
+                              Icons.shopping_bag_outlined,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            Text(
+                              "n items",
+                              style:
+                                  TextStyle(color: Colors.grey, fontSize: 12),
+                            )
+                          ],
+                        ),
+                        SizedBox(
+                          height: 6,
+                        ),
+                        Row(
+                          spacing: 8,
+                          children: [
+                            Icon(
+                              Icons.location_on_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            Text(
+                              "n km",
+                              style:
+                                  TextStyle(color: Colors.grey, fontSize: 12),
+                            )
+                          ],
+                        )
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      spacing: 4,
+                      children: [
+                        label == 'Delivered'
+                            ? Align(
+                                alignment: Alignment.topRight,
+                                child: Text(
+                                  'Delivered at',
+                                  style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              )
+                            : Container(),
+                        Align(
+                          alignment: Alignment.bottomRight,
+                          child: Text(
+                            '${label == 'Delivered' ? '' : 'Due '}${DateFormat("dd MMM yyyy - hh:mm a").format(delivery!.dueDatetime!)}',
+                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    )
+                  ],
+                )
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

@@ -58,7 +58,7 @@ class _HistoryTabState extends State<HistoryTab> {
             child: Padding(
               padding: EdgeInsets.only(left: 4, bottom: 6),
               child: Text(
-                "Delivery History",
+                "History",
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
