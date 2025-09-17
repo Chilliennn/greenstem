@@ -54,6 +54,7 @@ class AuthRepositoryImpl implements AuthRepository {
     return user;
   }
 
+  @override
   Future<void> signOut() async {
     await _userRepository.logout();
   }

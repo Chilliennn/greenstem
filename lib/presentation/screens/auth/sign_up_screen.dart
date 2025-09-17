@@ -11,7 +11,7 @@ import '../../widgets/custom_text_field.dart';
 import 'sign_in_screen.dart';
 
 class SignUpScreen extends ConsumerStatefulWidget {
-  const SignUpScreen({Key? key}) : super(key: key);
+  const SignUpScreen({super.key});
 
   @override
   ConsumerState<SignUpScreen> createState() => _SignUpScreenState();
@@ -505,9 +505,9 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
                                             width: 20,
                                             height: 20,
                                             child: Padding(
-                                              padding: const EdgeInsets.all(12),
+                                              padding: EdgeInsets.all(12),
                                               child:
-                                                  const CircularProgressIndicator(
+                                                  CircularProgressIndicator(
                                                       strokeWidth: 2,
                                                       color: AppColors.cyellow),
                                             ))

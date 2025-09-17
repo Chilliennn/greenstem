@@ -5,7 +5,7 @@ class ItemCard extends StatefulWidget {
   final String state;
   final Delivery? delivery;
 
-  ItemCard({super.key, required this.state, this.delivery});
+  const ItemCard({super.key, required this.state, this.delivery});
 
   @override
   State<ItemCard> createState() => _ItemCardState();
