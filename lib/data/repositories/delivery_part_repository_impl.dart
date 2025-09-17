@@ -1,10 +1,15 @@
 import 'dart:async';
+import 'package:uuid/uuid.dart';
 import '../../domain/entities/delivery_part.dart';
 import '../../domain/repositories/delivery_part_repository.dart';
 import '../datasources/local/local_delivery_part_database_service.dart';
 import '../datasources/remote/remote_delivery_part_datasource.dart';
 import '../models/delivery_part_model.dart';
 import '../../core/services/network_service.dart';
+
+extension _ListExtension<T> on List<T> {
+  T? get firstOrNull => isEmpty ? null : first;
+}
 
 class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
   final LocalDeliveryPartDatabaseService _localDataSource;
@@ -72,12 +77,38 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
 
   Future<void> _syncRemoteToLocal(List<DeliveryPartModel> remoteDeliveryParts) async {
     try {
+      // Get all local delivery parts
+      final localDeliveryParts = await _localDataSource.getAllDeliveryParts();
+      
+      // Create sets of IDs for comparison (using deliveryId as primary key)
+      final remoteIds = remoteDeliveryParts.map((dp) => dp.deliveryId).toSet();
+      final localIds = localDeliveryParts.map((dp) => dp.deliveryId).toSet();
+      
+      // Find delivery parts that exist locally but not remotely (deleted remotely)
+      final deletedIds = localIds.difference(remoteIds);
+      
       int newCount = 0;
       int updatedCount = 0;
       int skippedCount = 0;
+      int deletedCount = 0;
 
+      // Handle deletions - remove local records that don't exist remotely
+      for (final deletedId in deletedIds) {
+        final localDeliveryPart = localDeliveryParts.firstWhere((dp) => dp.deliveryId == deletedId);
+        
+        // Only delete if the local record was previously synced
+        if (localDeliveryPart.isSynced) {
+          await _localDataSource.deleteDeliveryPart(deletedId);
+          deletedCount++;
+          print('🗑️ Deleted delivery part $deletedId (removed from remote)');
+        }
+      }
+
+      // Handle updates and inserts
       for (final remoteDeliveryPart in remoteDeliveryParts) {
-        final localDeliveryPart = await _localDataSource.getDeliveryPartByDeliveryId(remoteDeliveryPart.deliveryId);
+        final localDeliveryPart = localDeliveryParts
+            .where((dp) => dp.deliveryId == remoteDeliveryPart.deliveryId)
+            .firstOrNull;
 
         if (localDeliveryPart == null) {
           // New delivery part from remote
@@ -98,8 +129,8 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
         }
       }
 
-      if (newCount > 0 || updatedCount > 0) {
-        print('✅ Remote→Local delivery part sync: $newCount new, $updatedCount updated, $skippedCount skipped');
+      if (newCount > 0 || updatedCount > 0 || deletedCount > 0) {
+        print('✅ Remote→Local delivery part sync: $newCount new, $updatedCount updated, $deletedCount deleted, $skippedCount skipped');
       }
     } catch (e) {
       print('❌ Remote→Local delivery part sync failed: $e');
@@ -125,17 +156,17 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
   }
 
   @override
-  Stream<List<DeliveryPart>> watchDeliveryPartsByDeliveryId(String deliveryId) {
-    return _localDataSource
-        .watchDeliveryPartsByDeliveryId(deliveryId)
-        .map((models) => models.map((model) => model.toEntity()).toList());
-  }
-
-  @override
   Stream<DeliveryPart?> watchDeliveryPartByDeliveryId(String deliveryId) {
     return _localDataSource
         .watchDeliveryPartByDeliveryId(deliveryId)
         .map((model) => model?.toEntity());
+  }
+
+  @override
+  Stream<List<DeliveryPart>> watchDeliveryPartsByPartId(String partId) {
+    return _localDataSource
+        .watchDeliveryPartsByPartId(partId)
+        .map((models) => models.map((model) => model.toEntity()).toList());
   }
 
   @override
@@ -202,6 +233,27 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
       }
     } catch (e) {
       throw Exception('Failed to delete delivery part: $e');
+    }
+  }
+
+  @override
+  Future<void> deleteDeliveryPartsByDeliveryId(String deliveryId) async {
+    try {
+      // Delete locally first
+      await _localDataSource.deleteDeliveryPartsByDeliveryId(deliveryId);
+      print('✅ Deleted delivery parts for delivery $deliveryId locally');
+
+      // Try to delete remotely if connected
+      if (await hasNetworkConnection()) {
+        try {
+          await _remoteDataSource.deleteDeliveryPartsByDeliveryId(deliveryId);
+          print('✅ Deleted delivery parts for delivery $deliveryId remotely');
+        } catch (e) {
+          print('❌ Failed to delete delivery parts remotely: $e');
+        }
+      }
+    } catch (e) {
+      throw Exception('Failed to delete delivery parts: $e');
     }
   }
 
