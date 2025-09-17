@@ -7,6 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
 import 'presentation/screens/splash/splash_screen.dart';
+import 'data/datasources/local/database_manager.dart'; // Add this import
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,15 +41,15 @@ Future<void> main() async {
     print('Error initializing Supabase: $e');
   }
 
-  // try {
-  //   final localUserService = LocalUserDatabaseService();
-  //   await localUserService.printAllUsers();
-  //   await localUserService.cleanDuplicateEmails();
-  //   await localUserService.printAllUsers();
-  // } catch (e) {
-  //   print('Error cleaning duplicates: $e');
-  // }
-
+  // TEMPORARY: Fix database schema (run this once, then remove)
+  try {
+    print('🔧 Fixing database schema...');
+    await DatabaseManager.recreateDatabase();
+    print('✅ Database schema fixed');
+  } catch (e) {
+    print('❌ Error fixing database schema: $e');
+  }
+  
   runApp(const ProviderScope(child: MyApp()));
 }
 

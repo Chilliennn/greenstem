@@ -28,6 +28,7 @@ class _SlidingTabSwitcherState extends State<SlidingTabSwitcher> {
   @override
   Widget build(BuildContext context) {
     return Container(
+      margin: EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: const Color(0xFF1D1D1D),
         borderRadius: BorderRadius.circular(10),

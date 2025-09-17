@@ -1,69 +1,18 @@
 import 'dart:async';
 import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
 import '../../models/delivery_model.dart';
+import 'database_manager.dart';
 
 extension _ListExtension<T> on List<T> {
   T? get firstOrNull => isEmpty ? null : first;
 }
 
 class LocalDeliveryDatabaseService {
-  static Database? _database;
   static const String _tableName = 'deliveries';
   final StreamController<List<DeliveryModel>> _deliveriesController =
       StreamController<List<DeliveryModel>>.broadcast();
 
-  Future<Database> get database async {
-    _database ??= await _initDatabase();
-    return _database!;
-  }
-
-  Future<Database> _initDatabase() async {
-    final databasePath = await getDatabasesPath();
-    final path = join(databasePath, 'greenstem.db');
-
-    return await openDatabase(
-      path,
-      version: 2, // Increment version for sync fields
-      onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
-    );
-  }
-
-  Future<void> _onCreate(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE $_tableName (
-        delivery_id TEXT PRIMARY KEY,
-        user_id TEXT,
-        status TEXT,
-        pickup_location TEXT,
-        delivery_location TEXT,
-        due_datetime TEXT,
-        pickup_time TEXT,
-        delivered_time TEXT,
-        vehicle_number TEXT,
-        proof_img_path TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        is_synced INTEGER DEFAULT 0,
-        needs_sync INTEGER DEFAULT 1
-      )
-    ''');
-  }
-
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      // Add sync fields if they don't exist
-      try {
-        await db.execute(
-            'ALTER TABLE $_tableName ADD COLUMN is_synced INTEGER DEFAULT 0');
-        await db.execute(
-            'ALTER TABLE $_tableName ADD COLUMN needs_sync INTEGER DEFAULT 1');
-      } catch (e) {
-        print('Sync columns might already exist: $e');
-      }
-    }
-  }
+  Future<Database> get database => DatabaseManager.database;
 
   // Stream-based operations
   Stream<List<DeliveryModel>> watchAllDeliveries() {
@@ -111,30 +60,63 @@ class LocalDeliveryDatabaseService {
     return DeliveryModel.fromJson(result.first);
   }
 
+  Future<DeliveryModel> insertOrUpdateDelivery(DeliveryModel delivery) async {
+    final db = await database;
+    final existing = await getDeliveryById(delivery.deliveryId);
+    
+    if (existing != null) {
+      // Use Last-Write Wins strategy
+      if (delivery.isNewerThan(existing)) {
+        await db.update(
+          _tableName,
+          delivery.toJson(),
+          where: 'delivery_id = ?',
+          whereArgs: [delivery.deliveryId],
+        );
+        print('🔄 Updated delivery ${delivery.deliveryId} (LWW: newer)');
+      } else {
+        print('⏭️ Skipped delivery ${delivery.deliveryId} (LWW: older)');
+        _loadDeliveries();
+        return existing;
+      }
+    } else {
+      await db.insert(_tableName, delivery.toJson());
+      print('➕ Inserted new delivery ${delivery.deliveryId}');
+    }
+
+    _loadDeliveries();
+    return delivery;
+  }
+
   Future<DeliveryModel> insertDelivery(DeliveryModel delivery) async {
     final db = await database;
-    await db.insert(_tableName, delivery.toJson(),
+    await db.insert(_tableName, delivery.toJson(), 
         conflictAlgorithm: ConflictAlgorithm.replace);
 
-    // Notify listeners
     _loadDeliveries();
-
     return delivery;
   }
 
   Future<DeliveryModel> updateDelivery(DeliveryModel delivery) async {
     final db = await database;
+    
+    // Increment version for local updates
+    final updatedDelivery = delivery.copyWith(
+      version: delivery.version + 1,
+      updatedAt: DateTime.now(),
+      needsSync: true,
+      isSynced: false,
+    );
+    
     await db.update(
       _tableName,
-      delivery.toJson(),
+      updatedDelivery.toJson(),
       where: 'delivery_id = ?',
       whereArgs: [delivery.deliveryId],
     );
 
-    // Notify listeners
     _loadDeliveries();
-
-    return delivery;
+    return updatedDelivery;
   }
 
   Future<void> deleteDelivery(String id) async {
@@ -145,7 +127,6 @@ class LocalDeliveryDatabaseService {
       whereArgs: [id],
     );
 
-    // Notify listeners
     _loadDeliveries();
   }
 
@@ -181,15 +162,15 @@ class LocalDeliveryDatabaseService {
     _loadDeliveries();
   }
 
-  Future<void> clearAllAndRecreate() async {
-    try {
-      final db = await database;
-      await db.delete(_tableName);
-      _loadDeliveries();
-      print('Database cleared and recreated successfully');
-    } catch (e) {
-      print('Error clearing database: $e');
-    }
+  // Debug method to check table structure
+  Future<void> debugTableStructure() async {
+    await DatabaseManager.debugAllTables();
+  }
+
+  // Method to recreate database
+  Future<void> clearDatabaseAndRecreate() async {
+    await DatabaseManager.recreateDatabase();
+    _loadDeliveries();
   }
 
   void dispose() {

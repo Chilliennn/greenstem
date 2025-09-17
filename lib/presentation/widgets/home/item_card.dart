@@ -18,7 +18,6 @@ class _ItemCardState extends State<ItemCard> {
   Widget build(BuildContext context) {
     switch (state) {
       case "incoming":
-      case "pending":
         return _IncomingCard(delivery: widget.delivery);
 
       case "awaiting":
