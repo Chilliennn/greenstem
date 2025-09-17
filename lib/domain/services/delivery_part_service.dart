@@ -45,10 +45,8 @@ class DeliveryPartService {
   }
 
   // Business logic methods
-  Future<DeliveryPart> updateQuantity(
-      String deliveryId, int newQuantity) async {
-    final deliveryPartStream =
-        _repository.watchDeliveryPartByDeliveryId(deliveryId);
+  Future<DeliveryPart> updateQuantity(String deliveryId, int newQuantity) async {
+    final deliveryPartStream = _repository.watchDeliveryPartByDeliveryId(deliveryId);
     final deliveryPart = await deliveryPartStream.first;
 
     if (deliveryPart == null) {
@@ -57,6 +55,22 @@ class DeliveryPartService {
 
     final updatedDeliveryPart = deliveryPart.copyWith(
       quantity: newQuantity,
+      updatedAt: DateTime.now(),
+    );
+
+    return await updateDeliveryPart(updatedDeliveryPart);
+  }
+
+  Future<DeliveryPart> updatePartId(String deliveryId, String newPartId) async {
+    final deliveryPartStream = _repository.watchDeliveryPartByDeliveryId(deliveryId);
+    final deliveryPart = await deliveryPartStream.first;
+
+    if (deliveryPart == null) {
+      throw Exception('Delivery part not found');
+    }
+
+    final updatedDeliveryPart = deliveryPart.copyWith(
+      partId: newPartId,
       updatedAt: DateTime.now(),
     );
 

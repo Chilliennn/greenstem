@@ -40,15 +40,6 @@ Future<void> main() async {
   } catch (e) {
     print('Error initializing Supabase: $e');
   }
-
-  // TEMPORARY: Fix database schema (run this once, then remove)
-  try {
-    print('🔧 Fixing database schema...');
-    await DatabaseManager.recreateDatabase();
-    print('✅ Database schema fixed');
-  } catch (e) {
-    print('❌ Error fixing database schema: $e');
-  }
   
   runApp(const ProviderScope(child: MyApp()));
 }

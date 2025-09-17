@@ -1,36 +1,89 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/part_model.dart';
+import 'dart:async';
 
 abstract class RemotePartDataSource {
   Future<List<PartModel>> getAllParts();
-
   Future<List<PartModel>> getPartsByCategory(String category);
-
   Future<PartModel?> getPartById(String partId);
-
   Future<PartModel> createPart(PartModel part);
-
   Future<PartModel> updatePart(PartModel part);
-
   Future<void> deletePart(String partId);
+  Stream<List<PartModel>> watchAllParts();
+  void dispose();
 }
 
 class SupabasePartDataSource implements RemotePartDataSource {
   final SupabaseClient _client = Supabase.instance.client;
+  final StreamController<List<PartModel>> _partsController =
+      StreamController<List<PartModel>>.broadcast();
+
+  RealtimeChannel? _channel;
+  Timer? _heartbeatTimer;
+
+  SupabasePartDataSource() {
+    _initRealtimeListener();
+    _startHeartbeat();
+  }
+
+  void _initRealtimeListener() {
+    try {
+      _channel = _client
+          .channel('part_changes')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'part',
+            callback: (payload) {
+              print('🔄 Real-time part change detected: ${payload.eventType}');
+              _refreshParts();
+            },
+          )
+          .subscribe();
+      print('✅ Real-time listener initialized for parts');
+    } catch (e) {
+      print('❌ Failed to initialize part real-time listener: $e');
+    }
+  }
+
+  void _startHeartbeat() {
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _refreshParts();
+    });
+  }
+
+  Future<void> _refreshParts() async {
+    try {
+      final parts = await getAllParts();
+      _partsController.add(parts);
+      print('📡 Remote parts refreshed: ${parts.length} items');
+    } catch (e) {
+      print('❌ Error refreshing parts: $e');
+    }
+  }
+
+  @override
+  Stream<List<PartModel>> watchAllParts() {
+    _refreshParts();
+    return _partsController.stream;
+  }
 
   @override
   Future<List<PartModel>> getAllParts() async {
     try {
       final response = await _client
           .from('part')
-          .select()
-          .order('created_at', ascending: false);
+          .select('*')
+          .order('updated_at', ascending: false);
 
-      return (response as List)
-          .map((json) => _safeParsePartModel(json))
-          .toList();
+      final List<dynamic> data = response as List<dynamic>;
+      final parts = data.map((json) => PartModel.fromSupabaseJson(json)).toList();
+
+      print('📥 Fetched ${parts.length} parts from Supabase');
+      return parts;
     } catch (e) {
-      throw Exception('Failed to fetch parts from remote: $e');
+      print('❌ Error fetching parts: $e');
+      throw Exception('Failed to fetch parts: $e');
     }
   }
 
@@ -39,15 +92,15 @@ class SupabasePartDataSource implements RemotePartDataSource {
     try {
       final response = await _client
           .from('part')
-          .select()
+          .select('*')
           .eq('category', category)
-          .order('created_at', ascending: false);
+          .order('updated_at', ascending: false);
 
-      return (response as List)
-          .map((json) => _safeParsePartModel(json))
-          .toList();
+      final List<dynamic> data = response as List<dynamic>;
+      return data.map((json) => PartModel.fromSupabaseJson(json)).toList();
     } catch (e) {
-      throw Exception('Failed to fetch parts by category from remote: $e');
+      print('❌ Error fetching parts by category: $e');
+      throw Exception('Failed to fetch parts by category: $e');
     }
   }
 
@@ -56,83 +109,74 @@ class SupabasePartDataSource implements RemotePartDataSource {
     try {
       final response = await _client
           .from('part')
-          .select()
+          .select('*')
           .eq('part_id', partId)
           .maybeSingle();
 
-      return response != null ? _safeParsePartModel(response) : null;
+      return response != null ? PartModel.fromSupabaseJson(response) : null;
     } catch (e) {
-      throw Exception('Failed to fetch part from remote: $e');
+      print('❌ Error fetching part $partId: $e');
+      throw Exception('Failed to fetch part: $e');
     }
   }
 
   @override
   Future<PartModel> createPart(PartModel part) async {
     try {
-      final data = part.toJson();
-      // Remove local-only fields
-      data.remove('is_synced');
-      data.remove('needs_sync');
+      print('📤 Creating part ${part.partId} in Supabase');
 
-      final response =
-          await _client.from('part').insert(data).select().single();
+      final response = await _client
+          .from('part')
+          .insert(part.toSupabaseJson())
+          .select()
+          .single();
 
-      return _safeParsePartModel(response);
+      final created = PartModel.fromSupabaseJson(response);
+      print('✅ Created part ${created.partId} in Supabase');
+      return created;
     } catch (e) {
-      throw Exception('Failed to create part on remote: $e');
+      print('❌ Error creating part: $e');
+      throw Exception('Failed to create part: $e');
     }
   }
 
   @override
   Future<PartModel> updatePart(PartModel part) async {
     try {
-      final data = part.toJson();
-      // Remove local-only fields
-      data.remove('is_synced');
-      data.remove('needs_sync');
+      print('📤 Updating part ${part.partId} in Supabase');
 
       final response = await _client
           .from('part')
-          .update(data)
+          .update(part.toSupabaseJson())
           .eq('part_id', part.partId)
           .select()
           .single();
 
-      return _safeParsePartModel(response);
+      final updated = PartModel.fromSupabaseJson(response);
+      print('✅ Updated part ${updated.partId} in Supabase');
+      return updated;
     } catch (e) {
-      throw Exception('Failed to update part on remote: $e');
+      print('❌ Error updating part: $e');
+      throw Exception('Failed to update part: $e');
     }
   }
 
   @override
   Future<void> deletePart(String partId) async {
     try {
+      print('📤 Deleting part $partId from Supabase');
       await _client.from('part').delete().eq('part_id', partId);
+      print('✅ Deleted part $partId from Supabase');
     } catch (e) {
-      throw Exception('Failed to delete part on remote: $e');
+      print('❌ Error deleting part: $e');
+      throw Exception('Failed to delete part: $e');
     }
   }
 
-  // Safe parsing method to handle null values
-  PartModel _safeParsePartModel(Map<String, dynamic> json) {
-    try {
-      return PartModel(
-        partId: json['part_id']?.toString() ?? '',
-        name: json['name']?.toString(),
-        description: json['description']?.toString(),
-        category: json['category']?.toString(),
-        createdAt: json['created_at'] != null
-            ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-            : DateTime.now(),
-        updatedAt: json['updated_at'] != null
-            ? DateTime.tryParse(json['updated_at'].toString())
-            : null,
-        isSynced: true,
-        // Remote data is always synced
-        needsSync: false, // Remote data doesn't need sync
-      );
-    } catch (e) {
-      throw Exception('Failed to parse part model: $e');
-    }
+  @override
+  void dispose() {
+    _channel?.unsubscribe();
+    _heartbeatTimer?.cancel();
+    _partsController.close();
   }
 }

@@ -1,46 +1,94 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/user_model.dart';
+import 'dart:async';
 
 abstract class RemoteUserDataSource {
   Future<List<UserModel>> getAllUsers();
-
   Future<UserModel?> getUserById(String userId);
-
   Future<UserModel?> getUserByEmail(String email);
-
   Future<UserModel?> getUserByUsername(String username);
-
   Future<UserModel> createUser(UserModel user);
-
   Future<UserModel> updateUser(UserModel user);
-
   Future<void> updatePassword(String userId, String newPassword);
-
   Future<void> deleteUser(String userId);
-
   Future<UserModel?> login(String username, String password);
-
   Future<UserModel> register(UserModel user);
-
   Future<void> logout();
+  Stream<List<UserModel>> watchAllUsers();
+  void dispose();
 }
 
 class SupabaseUserDataSource implements RemoteUserDataSource {
   final SupabaseClient _client = Supabase.instance.client;
+  final StreamController<List<UserModel>> _usersController =
+      StreamController<List<UserModel>>.broadcast();
+
+  RealtimeChannel? _channel;
+  Timer? _heartbeatTimer;
+
+  SupabaseUserDataSource() {
+    _initRealtimeListener();
+    _startHeartbeat();
+  }
+
+  void _initRealtimeListener() {
+    try {
+      _channel = _client
+          .channel('user_changes')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'user',
+            callback: (payload) {
+              print('🔄 Real-time user change detected: ${payload.eventType}');
+              _refreshUsers();
+            },
+          )
+          .subscribe();
+      print('✅ Real-time listener initialized for users');
+    } catch (e) {
+      print('❌ Failed to initialize user real-time listener: $e');
+    }
+  }
+
+  void _startHeartbeat() {
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _refreshUsers();
+    });
+  }
+
+  Future<void> _refreshUsers() async {
+    try {
+      final users = await getAllUsers();
+      _usersController.add(users);
+      print('📡 Remote users refreshed: ${users.length} items');
+    } catch (e) {
+      print('❌ Error refreshing users: $e');
+    }
+  }
+
+  @override
+  Stream<List<UserModel>> watchAllUsers() {
+    _refreshUsers();
+    return _usersController.stream;
+  }
 
   @override
   Future<List<UserModel>> getAllUsers() async {
     try {
       final response = await _client
           .from('user')
-          .select()
-          .order('created_at', ascending: false);
+          .select('*')
+          .order('updated_at', ascending: false);
 
-      return (response as List)
-          .map((json) => _safeParseUserModel(json))
-          .toList();
+      final List<dynamic> data = response as List<dynamic>;
+      final users = data.map((json) => UserModel.fromSupabaseJson(json)).toList();
+
+      print('📥 Fetched ${users.length} users from Supabase');
+      return users;
     } catch (e) {
-      throw Exception('Failed to fetch users from remote: $e');
+      print('❌ Error fetching users: $e');
+      throw Exception('Failed to fetch users: $e');
     }
   }
 
@@ -49,13 +97,15 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
     try {
       final response = await _client
           .from('user')
-          .select()
+          .select('*')
           .eq('user_id', userId)
           .maybeSingle();
 
-      return response != null ? _safeParseUserModel(response) : null;
+      if (response == null) return null;
+      return UserModel.fromSupabaseJson(response);
     } catch (e) {
-      throw Exception('Failed to fetch profiles from remote: $e');
+      print('❌ Error fetching user $userId: $e');
+      throw Exception('Failed to fetch user: $e');
     }
   }
 
@@ -64,67 +114,71 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
     try {
       final response = await _client
           .from('user')
-          .select()
+          .select('*')
           .eq('username', username)
           .maybeSingle();
 
-      return response != null ? _safeParseUserModel(response) : null;
+      return response != null ? UserModel.fromSupabaseJson(response) : null;
     } catch (e) {
-      throw Exception('Failed to fetch user by username from remote: $e');
+      print('❌ Error fetching user by username: $e');
+      throw Exception('Failed to fetch user by username: $e');
     }
   }
 
   @override
   Future<UserModel?> getUserByEmail(String email) async {
     try {
-      final response =
-          await _client.from('user').select().eq('email', email).maybeSingle();
+      final response = await _client
+          .from('user')
+          .select('*')
+          .eq('email', email)
+          .maybeSingle();
 
-      return response != null ? _safeParseUserModel(response) : null;
+      return response != null ? UserModel.fromSupabaseJson(response) : null;
     } catch (e) {
-      throw Exception('Failed to fetch profiles by email from remote: $e');
+      print('❌ Error fetching user by email: $e');
+      throw Exception('Failed to fetch user by email: $e');
     }
   }
 
   @override
   Future<UserModel> createUser(UserModel user) async {
     try {
+      print('📤 Creating user ${user.userId} in Supabase');
 
-      final data = user.toJson();
-      // Remove local-only fields
-      data.remove('is_synced');
-      data.remove('needs_sync');
-      data.remove('is_current_user');
+      final response = await _client
+          .from('user')
+          .insert(user.toSupabaseJson())
+          .select()
+          .single();
 
-      final response =
-          await _client.from('user').insert(data).select().single();
-
-      return _safeParseUserModel(response);
+      final created = UserModel.fromSupabaseJson(response);
+      print('✅ Created user ${created.userId} in Supabase');
+      return created;
     } catch (e) {
-      throw Exception('Failed to create profiles on remote: $e');
+      print('❌ Error creating user: $e');
+      throw Exception('Failed to create user: $e');
     }
   }
 
   @override
   Future<UserModel> updateUser(UserModel user) async {
     try {
-      final data = user.toJson();
-      // Remove local-only fields and sensitive data for public updates
-      data.remove('is_synced');
-      data.remove('needs_sync');
-      data.remove('is_current_user');
-      data.remove('password'); // Don't update password through this method
+      print('📤 Updating user ${user.userId} in Supabase');
 
       final response = await _client
           .from('user')
-          .update(data)
+          .update(user.toSupabaseJson())
           .eq('user_id', user.userId)
           .select()
           .single();
 
-      return _safeParseUserModel(response);
+      final updated = UserModel.fromSupabaseJson(response);
+      print('✅ Updated user ${updated.userId} in Supabase');
+      return updated;
     } catch (e) {
-      throw Exception('Failed to update profiles on remote: $e');
+      print('❌ Error updating user: $e');
+      throw Exception('Failed to update user: $e');
     }
   }
 
@@ -133,104 +187,63 @@ class SupabaseUserDataSource implements RemoteUserDataSource {
     try {
       await _client.from('user').update({
         'password': newPassword,
-        'updated_at': DateTime.now().toIso8601String()
+        'updated_at': DateTime.now().toIso8601String(),
       }).eq('user_id', userId);
     } catch (e) {
-      throw Exception('Failed to update password on remote: $e');
+      throw Exception('Failed to update password: $e');
     }
   }
 
   @override
   Future<void> deleteUser(String userId) async {
     try {
+      print('📤 Deleting user $userId from Supabase');
       await _client.from('user').delete().eq('user_id', userId);
+      print('✅ Deleted user $userId from Supabase');
     } catch (e) {
-      throw Exception('Failed to delete profiles on remote: $e');
+      print('❌ Error deleting user: $e');
+      throw Exception('Failed to delete user: $e');
     }
   }
 
   @override
   Future<UserModel?> login(String username, String password) async {
     try {
-      // Note: In a real app, you would use Supabase Auth
-      // This is a simplified version for demonstration
       final response = await _client
           .from('user')
-          .select()
-          .eq('username', username)
-          .eq('password', password) // In real app, use hashed passwords
+          .select('*')
+          .or('username.eq.$username,email.eq.$username')
+          .eq('password', password)
           .maybeSingle();
 
-      return response != null ? _safeParseUserModel(response) : null;
+      return response != null ? UserModel.fromSupabaseJson(response) : null;
     } catch (e) {
-      throw Exception('Login failed: $e');
+      throw Exception('Failed to login: $e');
     }
   }
 
   @override
   Future<UserModel> register(UserModel user) async {
     try {
-
-      if (user.email != null) {
-        final existingUserByEmail = await getUserByEmail(user.email!);
-        if (existingUserByEmail != null) {
-          throw Exception('Email already exists');
-        }
-      }
-
-      if (user.username != null) {
-        final existingUserByUsername = await getUserByUsername(user.username!);
-        if (existingUserByUsername != null) {
-          throw Exception('Username already exists');
-        }
-      }
-      
       return await createUser(user);
     } catch (e) {
-      throw Exception('Registration failed: $e');
+      throw Exception('Failed to register: $e');
     }
   }
 
   @override
   Future<void> logout() async {
     try {
-      // In a real app, you would invalidate tokens, etc.
       // For this demo, we'll just clear local session
     } catch (e) {
-      throw Exception('Logout failed: $e');
+      throw Exception('Failed to logout: $e');
     }
   }
 
-  // Safe parsing method to handle null values
-  UserModel _safeParseUserModel(Map<String, dynamic> json) {
-    try {
-      return UserModel(
-        userId: json['user_id']?.toString() ?? '',
-        username: json['username']?.toString(),
-        email: json['email']?.toString(),
-        password: json['password']?.toString(),
-        phoneNo: json['phone_no']?.toString(),
-        birthDate: json['birth_date'] != null
-            ? DateTime.tryParse(json['birth_date'].toString())
-            : null,
-        gender: json['gender']?.toString(),
-        profilePath: json['profile_path']?.toString(),
-        createdAt: json['created_at'] != null
-            ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-            : DateTime.now(),
-        updatedAt: json['updated_at'] != null
-            ? DateTime.tryParse(json['updated_at'].toString())
-            : null,
-        firstName: json['first_name']?.toString(),
-        lastName: json['last_name']?.toString(),
-        isSynced: true,
-        // Remote data is always synced
-        needsSync: false,
-        // Remote data doesn't need sync
-        isCurrentUser: false, // Will be set locally
-      );
-    } catch (e) {
-      throw Exception('Failed to parse profiles model: $e');
-    }
+  @override
+  void dispose() {
+    _channel?.unsubscribe();
+    _heartbeatTimer?.cancel();
+    _usersController.close();
   }
 }

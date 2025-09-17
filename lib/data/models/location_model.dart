@@ -8,9 +8,10 @@ class LocationModel {
   final double? latitude;
   final double? longitude;
   final DateTime createdAt;
-  final DateTime? updatedAt;
+  final DateTime updatedAt;
   final bool isSynced;
   final bool needsSync;
+  final int version; // Add version for LWW
 
   const LocationModel({
     required this.locationId,
@@ -20,9 +21,10 @@ class LocationModel {
     this.latitude,
     this.longitude,
     required this.createdAt,
-    this.updatedAt,
+    required this.updatedAt,
     this.isSynced = false,
     this.needsSync = true,
+    this.version = 1,
   });
 
   factory LocationModel.fromJson(Map<String, dynamic> json) {
@@ -34,11 +36,27 @@ class LocationModel {
       latitude: json['latitude'] as double?,
       longitude: json['longitude'] as double?,
       createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'] as String)
-          : null,
+      updatedAt: DateTime.parse(json['updated_at'] as String),
       isSynced: (json['is_synced'] as int?) == 1,
       needsSync: (json['needs_sync'] as int?) == 1,
+      version: (json['version'] as int?) ?? 1,
+    );
+  }
+
+  // From Supabase JSON
+  factory LocationModel.fromSupabaseJson(Map<String, dynamic> json) {
+    return LocationModel(
+      locationId: json['location_id'] as String,
+      name: json['name'] as String?,
+      type: json['type'] as String?,
+      address: json['address'] as String?,
+      latitude: json['latitude'] as double?,
+      longitude: json['longitude'] as double?,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+      isSynced: true,
+      needsSync: false,
+      version: (json['version'] as int?) ?? 1,
     );
   }
 
@@ -51,10 +69,53 @@ class LocationModel {
       'latitude': latitude,
       'longitude': longitude,
       'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt?.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
       'is_synced': isSynced ? 1 : 0,
       'needs_sync': needsSync ? 1 : 0,
+      'version': version,
     };
+  }
+
+  // To Supabase JSON
+  Map<String, dynamic> toSupabaseJson() {
+    final data = toJson();
+    data.remove('is_synced');
+    data.remove('needs_sync');
+    return data;
+  }
+
+  LocationModel copyWith({
+    String? locationId,
+    String? name,
+    String? type,
+    String? address,
+    double? latitude,
+    double? longitude,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    bool? isSynced,
+    bool? needsSync,
+    int? version,
+  }) {
+    return LocationModel(
+      locationId: locationId ?? this.locationId,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      address: address ?? this.address,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      isSynced: isSynced ?? this.isSynced,
+      needsSync: needsSync ?? this.needsSync,
+      version: version ?? this.version,
+    );
+  }
+
+  // Last-Write Wins conflict resolution
+  bool isNewerThan(LocationModel other) {
+    return updatedAt.isAfter(other.updatedAt) ||
+        (updatedAt.isAtSameMomentAs(other.updatedAt) && version > other.version);
   }
 
   // Convert to domain entity
@@ -73,7 +134,7 @@ class LocationModel {
 
   // Create from domain entity
   factory LocationModel.fromEntity(Location entity,
-      {bool? isSynced, bool? needsSync}) {
+      {bool? isSynced, bool? needsSync, int? version}) {
     return LocationModel(
       locationId: entity.locationId,
       name: entity.name,
@@ -82,35 +143,10 @@ class LocationModel {
       latitude: entity.latitude,
       longitude: entity.longitude,
       createdAt: entity.createdAt,
-      updatedAt: entity.updatedAt,
+      updatedAt: entity.updatedAt ?? DateTime.now(),
       isSynced: isSynced ?? false,
       needsSync: needsSync ?? true,
-    );
-  }
-
-  LocationModel copyWith({
-    String? locationId,
-    String? name,
-    String? type,
-    String? address,
-    double? latitude,
-    double? longitude,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-    bool? isSynced,
-    bool? needsSync,
-  }) {
-    return LocationModel(
-      locationId: locationId ?? this.locationId,
-      name: name ?? this.name,
-      type: type ?? this.type,
-      address: address ?? this.address,
-      latitude: latitude ?? this.latitude,
-      longitude: longitude ?? this.longitude,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      isSynced: isSynced ?? this.isSynced,
-      needsSync: needsSync ?? this.needsSync,
+      version: version ?? 1,
     );
   }
 }

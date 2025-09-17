@@ -6,9 +6,10 @@ class PartModel {
   final String? description;
   final String? category;
   final DateTime createdAt;
-  final DateTime? updatedAt;
+  final DateTime updatedAt;
   final bool isSynced;
   final bool needsSync;
+  final int version; // Add version for LWW
 
   const PartModel({
     required this.partId,
@@ -16,9 +17,10 @@ class PartModel {
     this.description,
     this.category,
     required this.createdAt,
-    this.updatedAt,
+    required this.updatedAt,
     this.isSynced = false,
     this.needsSync = true,
+    this.version = 1,
   });
 
   factory PartModel.fromJson(Map<String, dynamic> json) {
@@ -28,11 +30,25 @@ class PartModel {
       description: json['description'] as String?,
       category: json['category'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'] as String)
-          : null,
+      updatedAt: DateTime.parse(json['updated_at'] as String),
       isSynced: (json['is_synced'] as int?) == 1,
       needsSync: (json['needs_sync'] as int?) == 1,
+      version: (json['version'] as int?) ?? 1,
+    );
+  }
+
+  // From Supabase JSON
+  factory PartModel.fromSupabaseJson(Map<String, dynamic> json) {
+    return PartModel(
+      partId: json['part_id'] as String,
+      name: json['name'] as String?,
+      description: json['description'] as String?,
+      category: json['category'] as String?,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+      isSynced: true,
+      needsSync: false,
+      version: (json['version'] as int?) ?? 1,
     );
   }
 
@@ -43,10 +59,49 @@ class PartModel {
       'description': description,
       'category': category,
       'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt?.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
       'is_synced': isSynced ? 1 : 0,
       'needs_sync': needsSync ? 1 : 0,
+      'version': version,
     };
+  }
+
+  // To Supabase JSON
+  Map<String, dynamic> toSupabaseJson() {
+    final data = toJson();
+    data.remove('is_synced');
+    data.remove('needs_sync');
+    return data;
+  }
+
+  PartModel copyWith({
+    String? partId,
+    String? name,
+    String? description,
+    String? category,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    bool? isSynced,
+    bool? needsSync,
+    int? version,
+  }) {
+    return PartModel(
+      partId: partId ?? this.partId,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      category: category ?? this.category,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      isSynced: isSynced ?? this.isSynced,
+      needsSync: needsSync ?? this.needsSync,
+      version: version ?? this.version,
+    );
+  }
+
+  // Last-Write Wins conflict resolution
+  bool isNewerThan(PartModel other) {
+    return updatedAt.isAfter(other.updatedAt) ||
+        (updatedAt.isAtSameMomentAs(other.updatedAt) && version > other.version);
   }
 
   // Convert to domain entity
@@ -62,38 +117,17 @@ class PartModel {
   }
 
   // Create from domain entity
-  factory PartModel.fromEntity(Part entity, {bool? isSynced, bool? needsSync}) {
+  factory PartModel.fromEntity(Part entity, {bool? isSynced, bool? needsSync, int? version}) {
     return PartModel(
       partId: entity.partId,
       name: entity.name,
       description: entity.description,
       category: entity.category,
       createdAt: entity.createdAt,
-      updatedAt: entity.updatedAt,
+      updatedAt: entity.updatedAt ?? DateTime.now(),
       isSynced: isSynced ?? false,
       needsSync: needsSync ?? true,
-    );
-  }
-
-  PartModel copyWith({
-    String? partId,
-    String? name,
-    String? description,
-    String? category,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-    bool? isSynced,
-    bool? needsSync,
-  }) {
-    return PartModel(
-      partId: partId ?? this.partId,
-      name: name ?? this.name,
-      description: description ?? this.description,
-      category: category ?? this.category,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      isSynced: isSynced ?? this.isSynced,
-      needsSync: needsSync ?? this.needsSync,
+      version: version ?? 1,
     );
   }
 }
