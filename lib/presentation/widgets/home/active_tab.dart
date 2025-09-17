@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:greenstem/domain/entities/delivery.dart';
+import 'package:greenstem/domain/services/delivery_service.dart';
 import 'package:greenstem/presentation/widgets/home/item_card.dart';
 
 class ActiveTab extends StatefulWidget {
   final List<Delivery> deliveries;
+  final DeliveryService deliveryService;
 
-  const ActiveTab({super.key, required this.deliveries});
+  const ActiveTab({
+    super.key,
+    required this.deliveries,
+    required this.deliveryService,
+  });
 
   @override
   State<ActiveTab> createState() => _ActiveTabState();
@@ -45,22 +51,22 @@ class _ActiveTabState extends State<ActiveTab> {
       );
     }
 
-    // split deliveries into ongoing and incoming
+    // Split deliveries into ongoing and incoming
     final ongoingDeliveries = widget.deliveries
-        .where((d) => d.status?.toLowerCase() != "incoming")
+        .where((d) => d.status?.toLowerCase() != "incoming" && d.status?.toLowerCase() != "pending")
         .toList();
 
     final incomingDeliveries = widget.deliveries
-        .where((d) => d.status?.toLowerCase() == "incoming" || d.status == null)
+        .where((d) => d.status?.toLowerCase() == "incoming" || d.status?.toLowerCase() == "pending" || d.status == null)
         .toList();
 
     return ListView(
       padding: EdgeInsets.zero,
       children: [
-        // ongoing section
+        // Ongoing section
         if (ongoingDeliveries.isNotEmpty) ...[
           const Padding(
-            padding: EdgeInsets.only(left: 6, bottom: 6),
+            padding: EdgeInsets.only(left: 4, bottom: 6),
             child: Text(
               "Ongoing",
               style: TextStyle(
@@ -70,16 +76,14 @@ class _ActiveTabState extends State<ActiveTab> {
             ),
           ),
           for (final delivery in ongoingDeliveries)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: ItemCard(
-                state: delivery.status?.toLowerCase() ?? "",
-                delivery: delivery,
-              ),
+            ItemCard(
+              state: delivery.status?.toLowerCase() ?? "incoming",
+              delivery: delivery,
+              deliveryService: widget.deliveryService,
             ),
         ],
 
-        // incoming section
+        // Incoming section
         if (incomingDeliveries.isNotEmpty) ...[
           const Padding(
             padding: EdgeInsets.only(left: 6, top: 16, bottom: 6),
@@ -92,12 +96,10 @@ class _ActiveTabState extends State<ActiveTab> {
             ),
           ),
           for (final delivery in incomingDeliveries)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: ItemCard(
-                state: delivery.status?.toLowerCase() ?? "incoming",
-                delivery: delivery,
-              ),
+            ItemCard(
+              state: delivery.status?.toLowerCase() ?? "incoming",
+              delivery: delivery,
+              deliveryService: widget.deliveryService,
             ),
         ],
       ],

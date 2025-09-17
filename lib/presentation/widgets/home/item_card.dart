@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:greenstem/domain/entities/delivery.dart';
+import 'package:intl/intl.dart';
+import '../../../domain/services/delivery_service.dart';
 
 class ItemCard extends StatefulWidget {
   final String state;
   final Delivery? delivery;
+  final DeliveryService? deliveryService;
 
-  const ItemCard({super.key, required this.state, this.delivery});
+  const ItemCard(
+      {super.key, required this.state, this.delivery, this.deliveryService});
 
   @override
   State<ItemCard> createState() => _ItemCardState();
@@ -18,13 +22,15 @@ class _ItemCardState extends State<ItemCard> {
   Widget build(BuildContext context) {
     switch (state) {
       case "incoming":
-        return _IncomingCard(delivery: widget.delivery);
+        return _IncomingCard(
+            delivery: widget.delivery, deliveryService: widget.deliveryService);
 
       case "awaiting":
         return _StatusCard(
           label: "Awaiting",
           color: Color(0xFFFEA41D),
           delivery: widget.delivery,
+          deliveryService: widget.deliveryService,
         );
 
       case "picked up":
@@ -32,23 +38,31 @@ class _ItemCardState extends State<ItemCard> {
           label: "Picked up",
           color: Color(0xFF4B97FA),
           delivery: widget.delivery,
+          deliveryService: widget.deliveryService,
         );
 
       case "en route":
         return _StatusCard(
-          label: "En route",
+          label: "En Route",
           color: Color(0xFFC084FC),
           delivery: widget.delivery,
+          deliveryService: widget.deliveryService,
         );
 
       case "delivered":
-        return _DeliveredCard(delivery: widget.delivery);
+        return _StatusCard(
+          label: "Delivered",
+          color: Color(0xFFC084FC),
+          delivery: widget.delivery,
+          deliveryService: widget.deliveryService,
+        );
 
       default:
         return _StatusCard(
           label: "Unknown Status",
           color: Colors.grey,
           delivery: widget.delivery,
+          deliveryService: widget.deliveryService,
         );
     }
   }
@@ -56,8 +70,9 @@ class _ItemCardState extends State<ItemCard> {
 
 class _IncomingCard extends StatelessWidget {
   final Delivery? delivery;
+  final DeliveryService? deliveryService;
 
-  const _IncomingCard({this.delivery});
+  const _IncomingCard({this.delivery, this.deliveryService});
 
   @override
   Widget build(BuildContext context) {
@@ -69,44 +84,140 @@ class _IncomingCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.inbox, color: Colors.white),
-                SizedBox(width: 10),
-                Text(
-                  "Incoming Job",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
+            Icon(
+              Icons.inbox_rounded,
+              color: Colors.white,
+              size: 32,
             ),
             if (delivery != null) ...[
               SizedBox(height: 8),
-              Text(
-                'ID: ${delivery!.deliveryId}',
-                style: TextStyle(
-                  color: Colors.grey[300],
-                  fontSize: 12,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "From",
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  Text(
+                    "To",
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ],
+              ),
+              SizedBox(
+                height: 4,
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  if (delivery!.pickupLocation != null)
+                    FutureBuilder<String>(
+                      future: deliveryService
+                              ?.getLocationName(delivery!.pickupLocation) ??
+                          Future.value(delivery!.pickupLocation ?? 'Unknown'),
+                      builder: (context, snapshot) {
+                        return Text(
+                          snapshot.data ??
+                              delivery!.pickupLocation ??
+                              'Loading',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600),
+                        );
+                      },
+                    ),
+                  if (delivery!.deliveryLocation != null)
+                    FutureBuilder<String>(
+                      future: deliveryService
+                              ?.getLocationName(delivery!.deliveryLocation) ??
+                          Future.value(delivery!.deliveryLocation ?? 'Unknown'),
+                      builder: (context, snapshot) {
+                        return Text(
+                          snapshot.data ??
+                              delivery!.deliveryLocation ??
+                              'Loading...',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600),
+                        );
+                      },
+                    ),
+                ],
+              ),
+              SizedBox(
+                height: 4,
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'Due ${DateFormat("dd MMM yyyy - hh:mm a").format(delivery!.dueDatetime!)}',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
                 ),
               ),
-              if (delivery!.pickupLocation != null)
-                Text(
-                  'From: ${delivery!.pickupLocation}',
-                  style: TextStyle(
-                    color: Colors.grey[300],
-                    fontSize: 12,
+              SizedBox(
+                height: 16,
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        spacing: 8,
+                        children: [
+                          Icon(
+                            Icons.shopping_bag_outlined,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          Text(
+                            "n items",
+                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                          )
+                        ],
+                      ),
+                      SizedBox(
+                        height: 6,
+                      ),
+                      Row(
+                        spacing: 8,
+                        children: [
+                          Icon(
+                            Icons.location_on_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          Text(
+                            "n km",
+                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                          )
+                        ],
+                      )
+                    ],
                   ),
-                ),
-              if (delivery!.deliveryLocation != null)
-                Text(
-                  'To: ${delivery!.deliveryLocation}',
-                  style: TextStyle(
-                    color: Colors.grey[300],
-                    fontSize: 12,
-                  ),
-                ),
+                  TextButton(
+                    onPressed: () {},
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 30,
+                        vertical: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      "Accept",
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  )
+                ],
+              )
             ],
           ],
         ),
@@ -119,17 +230,19 @@ class _StatusCard extends StatelessWidget {
   final String label;
   final Color color;
   final Delivery? delivery;
+  final DeliveryService? deliveryService;
 
   const _StatusCard({
     required this.label,
     required this.color,
     this.delivery,
+    this.deliveryService,
   });
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: color,
+      color: Color(0xFF1D1D1D),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -137,121 +250,152 @@ class _StatusCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Icon(Icons.local_shipping, color: Colors.white),
-                const SizedBox(width: 10),
+                Icon(
+                  Icons.inbox_rounded,
+                  color: label == 'Awaiting'
+                      ? Color(0xFFFEA41D)
+                      : label == 'Picked up'
+                          ? Color(0xFF4B97FA)
+                          : label == 'En Route'
+                              ? Color(0xFFC084FC)
+                              : Color(0xFF00B65E),
+                  size: 32,
+                ),
                 Text(
                   label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                  style: TextStyle(
+                      color: label == 'Awaiting'
+                          ? Color(0xFFFEA41D)
+                          : label == 'Picked up'
+                              ? Color(0xFF4B97FA)
+                              : label == 'En Route'
+                                  ? Color(0xFFC084FC)
+                                  : Color(0xFF00B65E),
+                      fontWeight: FontWeight.w800),
+                )
               ],
             ),
             if (delivery != null) ...[
               SizedBox(height: 8),
               Text(
-                'ID: ${delivery!.deliveryId}',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                ),
+                label == 'Awaiting'
+                    ? 'Pick up from'
+                    : label == 'Picked up'
+                        ? 'Deliver to'
+                        : label == 'En Route'
+                            ? 'Delivering to'
+                            : 'Delivered to',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
               ),
-              if (delivery!.pickupLocation != null)
-                Text(
-                  'From: ${delivery!.pickupLocation}',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
+              SizedBox(
+                height: 4,
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  FutureBuilder<String>(
+                    future: deliveryService?.getLocationName(
+                          label == 'Awaiting'
+                              ? delivery?.pickupLocation
+                              : delivery?.deliveryLocation,
+                        ) ??
+                        Future.value(
+                          label == 'Awaiting'
+                              ? delivery?.pickupLocation ?? 'Unknown'
+                              : delivery?.deliveryLocation ?? 'Unknown',
+                        ),
+                    builder: (context, snapshot) {
+                      return Text(
+                        snapshot.data ??
+                            (label == 'Awaiting'
+                                ? delivery?.pickupLocation ?? 'Unknown'
+                                : delivery?.deliveryLocation ?? 'Unknown'),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    },
                   ),
-                ),
-              if (delivery!.deliveryLocation != null)
-                Text(
-                  'To: ${delivery!.deliveryLocation}',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
-                    fontSize: 12,
+                ],
+              ),
+              SizedBox(
+                height: 20,
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        spacing: 8,
+                        children: [
+                          Icon(
+                            Icons.shopping_bag_outlined,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          Text(
+                            "n items",
+                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                          )
+                        ],
+                      ),
+                      SizedBox(
+                        height: 6,
+                      ),
+                      Row(
+                        spacing: 8,
+                        children: [
+                          Icon(
+                            Icons.location_on_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          Text(
+                            "n km",
+                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                          )
+                        ],
+                      )
+                    ],
                   ),
-                ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    spacing: 4,
+                    children: [
+                      label == 'Delivered'
+                          ? Align(
+                              alignment: Alignment.topRight,
+                              child: Text(
+                                'Delivered at',
+                                style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                            )
+                          : Container(),
+                      Align(
+                        alignment: Alignment.bottomRight,
+                        child: Text(
+                          '${label == 'Delivered' ? '' : 'Due '}${DateFormat("dd MMM yyyy - hh:mm a").format(delivery!.dueDatetime!)}',
+                          style: TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  )
+                ],
+              )
             ],
           ],
         ),
       ),
     );
-  }
-}
-
-class _DeliveredCard extends StatelessWidget {
-  final Delivery? delivery;
-
-  const _DeliveredCard({this.delivery});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: Colors.grey[800],
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.check_circle, color: Color(0xFF00B65E)),
-                SizedBox(width: 10),
-                Text(
-                  "Delivered",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            if (delivery != null) ...[
-              SizedBox(height: 8),
-              Text(
-                'ID: ${delivery!.deliveryId}',
-                style: TextStyle(
-                  color: Colors.grey[300],
-                  fontSize: 12,
-                ),
-              ),
-              if (delivery!.pickupLocation != null)
-                Text(
-                  'From: ${delivery!.pickupLocation}',
-                  style: TextStyle(
-                    color: Colors.grey[300],
-                    fontSize: 12,
-                  ),
-                ),
-              if (delivery!.deliveryLocation != null)
-                Text(
-                  'To: ${delivery!.deliveryLocation}',
-                  style: TextStyle(
-                    color: Colors.grey[300],
-                    fontSize: 12,
-                  ),
-                ),
-              if (delivery!.dueDatetime != null)
-                Text(
-                  'Delivered: ${_formatDate(delivery!.dueDatetime!)}',
-                  style: TextStyle(
-                    color: Color(0xFF00B65E),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 }

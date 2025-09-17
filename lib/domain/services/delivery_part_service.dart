@@ -11,10 +11,6 @@ class DeliveryPartService {
     return _repository.watchAllDeliveryParts();
   }
 
-  Stream<List<DeliveryPart>> watchDeliveryPartsByDeliveryId(String deliveryId) {
-    return _repository.watchDeliveryPartsByDeliveryId(deliveryId);
-  }
-
   Stream<DeliveryPart?> watchDeliveryPartByDeliveryId(String deliveryId) {
     return _repository.watchDeliveryPartByDeliveryId(deliveryId);
   }
@@ -45,8 +41,10 @@ class DeliveryPartService {
   }
 
   // Business logic methods
-  Future<DeliveryPart> updateQuantity(String deliveryId, int newQuantity) async {
-    final deliveryPartStream = _repository.watchDeliveryPartByDeliveryId(deliveryId);
+  Future<DeliveryPart> updateQuantity(
+      String deliveryId, int newQuantity) async {
+    final deliveryPartStream =
+        _repository.watchDeliveryPartByDeliveryId(deliveryId);
     final deliveryPart = await deliveryPartStream.first;
 
     if (deliveryPart == null) {
@@ -62,7 +60,8 @@ class DeliveryPartService {
   }
 
   Future<DeliveryPart> updatePartId(String deliveryId, String newPartId) async {
-    final deliveryPartStream = _repository.watchDeliveryPartByDeliveryId(deliveryId);
+    final deliveryPartStream =
+        _repository.watchDeliveryPartByDeliveryId(deliveryId);
     final deliveryPart = await deliveryPartStream.first;
 
     if (deliveryPart == null) {

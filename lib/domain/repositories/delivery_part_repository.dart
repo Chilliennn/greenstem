@@ -4,7 +4,7 @@ abstract class DeliveryPartRepository {
   // Offline-first read operations (streams)
   Stream<List<DeliveryPart>> watchAllDeliveryParts();
 
-  Stream<List<DeliveryPart>> watchDeliveryPartsByDeliveryId(String deliveryId);
+  Stream<List<DeliveryPart>> watchDeliveryPartsByPartId(String partId);
 
   Stream<DeliveryPart?> watchDeliveryPartByDeliveryId(String deliveryId);
 
@@ -14,6 +14,8 @@ abstract class DeliveryPartRepository {
   Future<DeliveryPart> updateDeliveryPart(DeliveryPart deliveryPart);
 
   Future<void> deleteDeliveryPart(String deliveryId);
+
+  Future<void> deleteDeliveryPartsByDeliveryId(String deliveryId);
 
   // Sync operations
   Future<void> syncToRemote();
