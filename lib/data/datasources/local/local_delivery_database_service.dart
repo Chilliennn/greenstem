@@ -20,13 +20,24 @@ class LocalDeliveryDatabaseService {
     return _deliveriesController.stream;
   }
 
+  Stream<List<DeliveryModel>> watchDeliveryByUserId(String userId) async* {
+    _loadDeliveries();
+    await for (final deliveries in _deliveriesController.stream) {
+      final userDeliveries =
+          deliveries.where((d) => d.userId == userId).toList();
+      yield userDeliveries;
+    }
+  }
+
   Stream<DeliveryModel?> watchDeliveryById(String id) async* {
+    _loadDeliveries();
     await for (final deliveries in _deliveriesController.stream) {
       yield deliveries.where((d) => d.deliveryId == id).firstOrNull;
     }
   }
 
   Stream<List<DeliveryModel>> watchDeliveriesByStatus(String status) async* {
+    _loadDeliveries();
     await for (final deliveries in _deliveriesController.stream) {
       yield deliveries.where((d) => d.status == status).toList();
     }

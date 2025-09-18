@@ -8,6 +8,8 @@ abstract class DeliveryPartRepository {
 
   Stream<DeliveryPart?> watchDeliveryPartByDeliveryId(String deliveryId);
 
+  Stream<int?> getNumberOfDeliveryPartsByDeliveryId(String deliveryId);
+
   // Offline-first write operations
   Future<DeliveryPart> createDeliveryPart(DeliveryPart deliveryPart);
 

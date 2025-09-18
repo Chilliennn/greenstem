@@ -28,7 +28,7 @@ class _SlidingTabSwitcherState extends State<SlidingTabSwitcher> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: EdgeInsets.all(4),
+      margin: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: const Color(0xFF1D1D1D),
         borderRadius: BorderRadius.circular(10),
@@ -44,8 +44,8 @@ class _SlidingTabSwitcherState extends State<SlidingTabSwitcher> {
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
             child: Container(
-              width: (MediaQuery.of(context).size.width - 40) /
-                  widget.tabs.length, // split evenly
+              width:
+                  (MediaQuery.of(context).size.width - 40) / widget.tabs.length,
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -74,8 +74,8 @@ class _SlidingTabSwitcherState extends State<SlidingTabSwitcher> {
                       widget.tabs[index],
                       style: TextStyle(
                         color: isSelected
-                            ? const Color(0xFF1D1D1D) // dark when active
-                            : const Color(0xFFFEFEFE), // light when inactive
+                            ? const Color(0xFF1D1D1D)
+                            : const Color(0xFFFEFEFE),
                       ),
                     ),
                   ),

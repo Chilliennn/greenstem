@@ -1,22 +1,30 @@
+import 'package:greenstem/domain/entities/delivery_part.dart';
+import 'package:greenstem/domain/repositories/delivery_part_repository.dart';
+
 import '../entities/delivery.dart';
 import '../entities/location.dart';
 import '../repositories/delivery_repository.dart';
 import '../repositories/location_repository.dart';
 
-// Add this extension at the top of the file
 extension _ListExtension<T> on List<T> {
   T? get firstOrNull => isEmpty ? null : first;
 }
 
 class DeliveryService {
   final DeliveryRepository _deliveryRepository;
+  final DeliveryPartRepository? _deliveryPartRepository;
   final LocationRepository? _locationRepository;
 
-  DeliveryService(this._deliveryRepository, [this._locationRepository]);
+  DeliveryService(this._deliveryRepository,
+      [this._deliveryPartRepository, this._locationRepository]);
 
-  // Stream-based reading (offline-first)
+  // stream-based reading (offline-first)
   Stream<List<Delivery>> watchAllDeliveries() {
     return _deliveryRepository.watchAllDeliveries();
+  }
+
+  Stream<List<Delivery>> watchDeliveryByUserId(String userId) {
+    return _deliveryRepository.watchDeliveryByUserId(userId);
   }
 
   Stream<Delivery?> watchDeliveryById(String id) {
@@ -31,25 +39,22 @@ class DeliveryService {
     return _deliveryRepository.watchDeliveriesByStatus('completed');
   }
 
-  // Location fetching methods - USING ACTUAL EXISTING METHODS
+  // location fetching methods
   Future<String> getLocationName(String? locationId) async {
-    if (locationId == null || locationId.isEmpty) return 'Unknown Location';
+    if (locationId == null || locationId.isEmpty) return 'unknown location';
 
     try {
-      // If locationRepository is available, fetch from it
       if (_locationRepository != null) {
         final locations = await _locationRepository!.getCachedLocations();
-        final location = locations
-            .where((loc) => loc.locationId == locationId)
-            .firstOrNull;
-        return location?.name ?? locationId; // Fallback to ID if name not found
+        final location =
+            locations.where((loc) => loc.locationId == locationId).firstOrNull;
+        return location?.name ?? locationId;
       }
 
-      // Fallback: return the locationId itself (might be a string location)
       return locationId;
     } catch (e) {
-      print('❌ Error getting location name: $e');
-      return locationId; // Fallback to showing the ID
+      print('error getting location name: $e');
+      return locationId;
     }
   }
 
@@ -60,17 +65,65 @@ class DeliveryService {
       final locations = await _locationRepository!.getCachedLocations();
       return locations.where((loc) => loc.locationId == locationId).firstOrNull;
     } catch (e) {
-      print('❌ Error getting location: $e');
+      print('error getting location: $e');
       return null;
     }
   }
 
-  // Write operations (offline-first)
+  // new method to get coordinates for distance calculation
+  Future<Map<String, double?>> getDeliveryCoordinates(String pickupLocationId, String deliveryLocationId) async {
+    if (_locationRepository == null) {
+      return {'pickupLat': null, 'pickupLon': null, 'deliveryLat': null, 'deliveryLon': null};
+    }
+
+    try {
+      final locations = await _locationRepository!.getCachedLocations();
+      
+      final pickupLocation = locations.where((loc) => loc.locationId == pickupLocationId).firstOrNull;
+      final deliveryLocation = locations.where((loc) => loc.locationId == deliveryLocationId).firstOrNull;
+
+      return {
+        'pickupLat': pickupLocation?.latitude,
+        'pickupLon': pickupLocation?.longitude,
+        'deliveryLat': deliveryLocation?.latitude,
+        'deliveryLon': deliveryLocation?.longitude,
+      };
+    } catch (e) {
+      print('error getting delivery coordinates: $e');
+      return {'pickupLat': null, 'pickupLon': null, 'deliveryLat': null, 'deliveryLon': null};
+    }
+  }
+
+  // delivery part fetching methods
+  Future<Stream<DeliveryPart?>> watchDeliveryPartByDeliveryId(
+      String deliveryId) async {
+    if (_deliveryPartRepository == null) return Stream.value(null);
+
+    try {
+      return await _deliveryPartRepository
+          .watchDeliveryPartByDeliveryId(deliveryId);
+    } catch (e) {
+      throw Exception('failed to get delivery parts: $e');
+    }
+  }
+
+  Stream<int?> getNumberOfDeliveryPartsByDeliveryId(String deliveryId) {
+    if (_deliveryPartRepository == null) return Stream.value(0);
+
+    try {
+      return _deliveryPartRepository!.getNumberOfDeliveryPartsByDeliveryId(deliveryId);
+    } catch (e) {
+      print('failed to get number of delivery parts: $e');
+      return Stream.value(0);
+    }
+  }
+
+  // write operations (offline-first)
   Future<Delivery> createDelivery(Delivery delivery) async {
     try {
       return await _deliveryRepository.createDelivery(delivery);
     } catch (e) {
-      throw Exception('Failed to create delivery: $e');
+      throw Exception('failed to create delivery: $e');
     }
   }
 
@@ -78,7 +131,7 @@ class DeliveryService {
     try {
       return await _deliveryRepository.updateDelivery(delivery);
     } catch (e) {
-      throw Exception('Failed to update delivery: $e');
+      throw Exception('failed to update delivery: $e');
     }
   }
 
@@ -86,17 +139,17 @@ class DeliveryService {
     try {
       await _deliveryRepository.deleteDelivery(id);
     } catch (e) {
-      throw Exception('Failed to delete delivery: $e');
+      throw Exception('failed to delete delivery: $e');
     }
   }
 
-  // Business logic methods
+  // business logic methods
   Future<Delivery> markAsCompleted(String deliveryId) async {
     final deliveryStream = _deliveryRepository.watchDeliveryById(deliveryId);
     final delivery = await deliveryStream.first;
 
     if (delivery == null) {
-      throw Exception('Delivery not found');
+      throw Exception('delivery not found');
     }
 
     final updatedDelivery = delivery.copyWith(
@@ -108,16 +161,16 @@ class DeliveryService {
     return await updateDelivery(updatedDelivery);
   }
 
-  // Cache operations
+  // cache operations
   Future<List<Delivery>> getCachedDeliveries() async {
     try {
       return await _deliveryRepository.getCachedDeliveries();
     } catch (e) {
-      throw Exception('Failed to get cached deliveries: $e');
+      throw Exception('failed to get cached deliveries: $e');
     }
   }
 
-  // Sync operations
+  // sync operations
   Future<void> syncData() async {
     try {
       await _deliveryRepository.syncToRemote();
@@ -126,9 +179,10 @@ class DeliveryService {
         await _locationRepository!.syncFromRemote();
       }
     } catch (e) {
-      throw Exception('Failed to sync data: $e');
+      throw Exception('failed to sync data: $e');
     }
   }
 
-  Future<bool> hasNetworkConnection() => _deliveryRepository.hasNetworkConnection();
+  Future<bool> hasNetworkConnection() =>
+      _deliveryRepository.hasNetworkConnection();
 }

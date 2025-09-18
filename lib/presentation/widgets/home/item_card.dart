@@ -3,6 +3,7 @@ import 'package:greenstem/domain/entities/delivery.dart';
 import 'package:greenstem/presentation/screens/profiles/profile_screen.dart';
 import 'package:intl/intl.dart';
 import '../../../domain/services/delivery_service.dart';
+import '../../../core/utils/distance_calculator.dart';
 
 class ItemCard extends StatefulWidget {
   final String state;
@@ -74,6 +75,32 @@ class _IncomingCard extends StatelessWidget {
   final DeliveryService? deliveryService;
 
   const _IncomingCard({this.delivery, this.deliveryService});
+
+  Future<String> _calculateDistance() async {
+    if (delivery?.pickupLocation == null || delivery?.deliveryLocation == null || deliveryService == null) {
+      return 'n/a';
+    }
+
+    try {
+      final coordinates = await deliveryService!.getDeliveryCoordinates(
+        delivery!.pickupLocation!,
+        delivery!.deliveryLocation!,
+      );
+
+      final distance = await DistanceCalculator.calculateDistance(
+        coordinates['pickupLat'],
+        coordinates['pickupLon'],
+        coordinates['deliveryLat'],
+        coordinates['deliveryLon'],
+        useApi: true, // set to false if you don't want to use external api
+      );
+
+      return DistanceCalculator.formatDistance(distance);
+    } catch (e) {
+      print('error calculating distance: $e');
+      return 'n/a';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -174,10 +201,23 @@ class _IncomingCard extends StatelessWidget {
                             color: Colors.white,
                             size: 18,
                           ),
-                          Text(
-                            "n items",
-                            style: TextStyle(color: Colors.grey, fontSize: 12),
-                          )
+                          StreamBuilder<int?>(
+                            stream: deliveryService?.getNumberOfDeliveryPartsByDeliveryId(delivery!.deliveryId),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return Text(
+                                  "loading items",
+                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                );
+                              }
+
+                              final itemCount = snapshot.data ?? 0;
+                              return Text(
+                                "$itemCount items",
+                                style: TextStyle(color: Colors.grey, fontSize: 12),
+                              );
+                            },
+                          ),
                         ],
                       ),
                       SizedBox(
@@ -191,10 +231,22 @@ class _IncomingCard extends StatelessWidget {
                             color: Colors.white,
                             size: 18,
                           ),
-                          Text(
-                            "n km",
-                            style: TextStyle(color: Colors.grey, fontSize: 12),
-                          )
+                          FutureBuilder<String>(
+                            future: _calculateDistance(),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return Text(
+                                  "calculating...",
+                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                );
+                              }
+
+                              return Text(
+                                snapshot.data ?? 'n/a',
+                                style: TextStyle(color: Colors.grey, fontSize: 12),
+                              );
+                            },
+                          ),
                         ],
                       )
                     ],
@@ -240,14 +292,35 @@ class _StatusCard extends StatelessWidget {
     this.deliveryService,
   });
 
+  Future<String> _calculateDistance() async {
+    if (delivery?.pickupLocation == null || delivery?.deliveryLocation == null || deliveryService == null) {
+      return 'n/a';
+    }
+
+    try {
+      final coordinates = await deliveryService!.getDeliveryCoordinates(
+        delivery!.pickupLocation!,
+        delivery!.deliveryLocation!,
+      );
+
+      final distance = await DistanceCalculator.calculateDistance(
+        coordinates['pickupLat'],
+        coordinates['pickupLon'],
+        coordinates['deliveryLat'],
+        coordinates['deliveryLon'],
+        useApi: true, // set to false if you don't want to use external api
+      );
+
+      return DistanceCalculator.formatDistance(distance);
+    } catch (e) {
+      print('error calculating distance: $e');
+      return 'n/a';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      // TODO: waiting delivery_detail_screen.dart to be implemented
-      // onTap: () async => await Navigator.push(
-      //   context,
-      //   MaterialPageRoute(builder: (context) => const ProfileScreen()),
-      // ),
       child: Card(
         color: Color(0xFF1D1D1D),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -347,11 +420,23 @@ class _StatusCard extends StatelessWidget {
                               color: Colors.white,
                               size: 18,
                             ),
-                            Text(
-                              "n items",
-                              style:
-                                  TextStyle(color: Colors.grey, fontSize: 12),
-                            )
+                            StreamBuilder<int?>(
+                              stream: deliveryService?.getNumberOfDeliveryPartsByDeliveryId(delivery!.deliveryId),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState == ConnectionState.waiting) {
+                                  return Text(
+                                    "loading items",
+                                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                                  );
+                                }
+
+                                final itemCount = snapshot.data ?? 0;
+                                return Text(
+                                  "$itemCount items",
+                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                );
+                              },
+                            ),
                           ],
                         ),
                         SizedBox(
@@ -365,11 +450,22 @@ class _StatusCard extends StatelessWidget {
                               color: Colors.white,
                               size: 18,
                             ),
-                            Text(
-                              "n km",
-                              style:
-                                  TextStyle(color: Colors.grey, fontSize: 12),
-                            )
+                            FutureBuilder<String>(
+                              future: _calculateDistance(),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState == ConnectionState.waiting) {
+                                  return Text(
+                                    "calculating...",
+                                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                                  );
+                                }
+
+                                return Text(
+                                  snapshot.data ?? 'n/a',
+                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                );
+                              },
+                            ),
                           ],
                         )
                       ],

@@ -33,12 +33,12 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
   Future<void> _initInitialSync() async {
     if (await hasNetworkConnection()) {
       try {
-        print('🔄 Initial delivery part sync: Fetching data from remote...');
+        print('Initial delivery part sync: Fetching data from remote...');
         await syncFromRemote();
         await syncToRemote();
-        print('✅ Initial delivery part sync completed');
+        print('Initial delivery part sync completed');
       } catch (e) {
-        print('❌ Initial delivery part sync failed: $e');
+        print('Initial delivery part sync failed: $e');
       }
     }
   }
@@ -48,13 +48,12 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
     _remoteSubscription = _remoteDataSource.watchAllDeliveryParts().listen(
       (remoteDeliveryParts) async {
         if (await hasNetworkConnection()) {
-          print(
-              '📡 Remote delivery part changes detected, syncing to local...');
+          print('Remote delivery part changes detected, syncing to local...');
           await _syncRemoteToLocal(remoteDeliveryParts);
         }
       },
       onError: (error) {
-        print('❌ Remote delivery part sync error: $error');
+        print('Remote delivery part sync error: $error');
       },
     );
 
@@ -65,14 +64,13 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
         localSyncDebounce?.cancel();
         localSyncDebounce = Timer(const Duration(seconds: 2), () async {
           if (await hasNetworkConnection()) {
-            print(
-                '📱 Local delivery part changes detected, syncing to remote...');
+            print('Local delivery part changes detected, syncing to remote...');
             await syncToRemote();
           }
         });
       },
       onError: (error) {
-        print('❌ Local delivery part sync error: $error');
+        print('Local delivery part sync error: $error');
       },
     );
   }
@@ -104,7 +102,7 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
         if (localDeliveryPart.isSynced) {
           await _localDataSource.deleteDeliveryPart(deletedId);
           deletedCount++;
-          print('🗑️ Deleted delivery part $deletedId (removed from remote)');
+          print('Deleted delivery part $deletedId (removed from remote)');
         }
       }
 
@@ -136,10 +134,10 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
 
       if (newCount > 0 || updatedCount > 0 || deletedCount > 0) {
         print(
-            '✅ Remote→Local delivery part sync: $newCount new, $updatedCount updated, $deletedCount deleted, $skippedCount skipped');
+            'Remote→Local delivery part sync: $newCount new, $updatedCount updated, $deletedCount deleted, $skippedCount skipped');
       }
     } catch (e) {
-      print('❌ Remote→Local delivery part sync failed: $e');
+      print('Remote→Local delivery part sync failed: $e');
     }
   }
 
@@ -149,7 +147,7 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
         await syncFromRemote();
         await syncToRemote();
       } catch (e) {
-        print('❌ Background delivery part sync failed: $e');
+        print('Background delivery part sync failed: $e');
       }
     }
   }
@@ -162,6 +160,13 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
   }
 
   @override
+  Stream<List<DeliveryPart>> watchDeliveryPartsByPartId(String partId) {
+    return _localDataSource
+        .watchDeliveryPartsByPartId(partId)
+        .map((models) => models.map((model) => model.toEntity()).toList());
+  }
+
+  @override
   Stream<DeliveryPart?> watchDeliveryPartByDeliveryId(String deliveryId) {
     return _localDataSource
         .watchDeliveryPartByDeliveryId(deliveryId)
@@ -169,10 +174,8 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
   }
 
   @override
-  Stream<List<DeliveryPart>> watchDeliveryPartsByPartId(String partId) {
-    return _localDataSource
-        .watchDeliveryPartsByPartId(partId)
-        .map((models) => models.map((model) => model.toEntity()).toList());
+  Stream<int?> getNumberOfDeliveryPartsByDeliveryId(String deliveryId) {
+    return _localDataSource.getNumberOfDeliveryPartsByDeliveryId(deliveryId);
   }
 
   @override
@@ -192,7 +195,7 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
       );
 
       final savedModel = await _localDataSource.insertDeliveryPart(model);
-      print('✅ Created delivery part locally: ${savedModel.deliveryId}');
+      print('Created delivery part locally: ${savedModel.deliveryId}');
 
       return savedModel.toEntity();
     } catch (e) {
@@ -216,7 +219,7 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
 
       final savedModel = await _localDataSource.updateDeliveryPart(model);
       print(
-          '✅ Updated delivery part locally: ${savedModel.deliveryId} (v${savedModel.version})');
+          'Updated delivery part locally: ${savedModel.deliveryId} (v${savedModel.version})');
 
       return savedModel.toEntity();
     } catch (e) {
@@ -229,15 +232,15 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
     try {
       // Delete locally first
       await _localDataSource.deleteDeliveryPart(deliveryId);
-      print('✅ Deleted delivery part locally: $deliveryId');
+      print('Deleted delivery part locally: $deliveryId');
 
       // Try to delete remotely if connected
       if (await hasNetworkConnection()) {
         try {
           await _remoteDataSource.deleteDeliveryPart(deliveryId);
-          print('✅ Deleted delivery part remotely: $deliveryId');
+          print('Deleted delivery part remotely: $deliveryId');
         } catch (e) {
-          print('❌ Failed to delete delivery part remotely: $e');
+          print('Failed to delete delivery part remotely: $e');
         }
       }
     } catch (e) {
@@ -250,21 +253,21 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
     try {
       // Delete locally first
       await _localDataSource.deleteDeliveryPartsByDeliveryId(deliveryId);
-      print('✅ Deleted delivery parts for delivery $deliveryId locally');
+      print('Deleted delivery parts for delivery $deliveryId locally');
 
       // Try to delete remotely if connected
       if (await hasNetworkConnection()) {
         try {
           await _remoteDataSource.deleteDeliveryPartsByDeliveryId(deliveryId);
-          print('✅ Deleted delivery parts for delivery $deliveryId remotely');
+          print('Deleted delivery parts for delivery $deliveryId remotely');
         } catch (e) {
           print(
-              '❌ Failed to delete delivery parts remotely, will retry later: $e');
+              'Failed to delete delivery parts remotely, will retry later: $e');
           // Mark for deletion during next sync
         }
       }
     } catch (e) {
-      print('❌ Error deleting delivery parts for delivery $deliveryId: $e');
+      print('Error deleting delivery parts for delivery $deliveryId: $e');
       throw Exception('Failed to delete delivery parts: $e');
     }
   }
@@ -272,7 +275,7 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
   @override
   Future<void> syncToRemote() async {
     if (!await hasNetworkConnection()) {
-      print('⚠️ No network connection for delivery part sync to remote');
+      print('No network connection for delivery part sync to remote');
       return;
     }
 
@@ -282,7 +285,7 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
       if (unsyncedDeliveryParts.isEmpty) return;
 
       print(
-          '📤 Syncing ${unsyncedDeliveryParts.length} local delivery part changes to remote...');
+          'Syncing ${unsyncedDeliveryParts.length} local delivery part changes to remote...');
 
       for (final deliveryPart in unsyncedDeliveryParts) {
         try {
@@ -292,31 +295,29 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
           if (remoteDeliveryPart == null) {
             // Create new delivery part remotely
             await _remoteDataSource.createDeliveryPart(deliveryPart);
-            print(
-                '➕ Created delivery part ${deliveryPart.deliveryId} remotely');
+            print('Created delivery part ${deliveryPart.deliveryId} remotely');
           } else {
             // Check if local version is newer (LWW)
             if (deliveryPart.isNewerThan(remoteDeliveryPart)) {
               await _remoteDataSource.updateDeliveryPart(deliveryPart);
               print(
-                  '🔄 Updated delivery part ${deliveryPart.deliveryId} remotely (LWW)');
+                  'Updated delivery part ${deliveryPart.deliveryId} remotely (LWW)');
             } else {
               print(
-                  '⏭️ Skipped delivery part ${deliveryPart.deliveryId} (remote is newer)');
+                  'Skipped delivery part ${deliveryPart.deliveryId} (remote is newer)');
             }
           }
 
           // Mark as synced locally
           await _localDataSource.markAsSynced(deliveryPart.deliveryId);
         } catch (e) {
-          print(
-              '❌ Failed to sync delivery part ${deliveryPart.deliveryId}: $e');
+          print('Failed to sync delivery part ${deliveryPart.deliveryId}: $e');
         }
       }
 
-      print('✅ Local→Remote delivery part sync completed');
+      print('Local→Remote delivery part sync completed');
     } catch (e) {
-      print('❌ Local→Remote delivery part sync failed: $e');
+      print('Local→Remote delivery part sync failed: $e');
       throw Exception('Failed to sync to remote: $e');
     }
   }
@@ -324,16 +325,16 @@ class DeliveryPartRepositoryImpl implements DeliveryPartRepository {
   @override
   Future<void> syncFromRemote() async {
     if (!await hasNetworkConnection()) {
-      print('⚠️ No network connection for delivery part sync from remote');
+      print('No network connection for delivery part sync from remote');
       return;
     }
 
     try {
-      print('📥 Syncing delivery parts from remote to local...');
+      print('Syncing delivery parts from remote to local...');
       final remoteDeliveryParts = await _remoteDataSource.getAllDeliveryParts();
       await _syncRemoteToLocal(remoteDeliveryParts);
     } catch (e) {
-      print('❌ Delivery part sync from remote failed: $e');
+      print('Delivery part sync from remote failed: $e');
       throw Exception('Failed to sync from remote: $e');
     }
   }
