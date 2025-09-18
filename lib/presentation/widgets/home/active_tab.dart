@@ -86,7 +86,7 @@ class _ActiveTabState extends State<ActiveTab> {
         // Incoming section
         if (incomingDeliveries.isNotEmpty) ...[
           const Padding(
-            padding: EdgeInsets.only(left: 6, top: 16, bottom: 6),
+            padding: EdgeInsets.only(left: 6, top: 24, bottom: 6),
             child: Text(
               "Incoming Job",
               style: TextStyle(

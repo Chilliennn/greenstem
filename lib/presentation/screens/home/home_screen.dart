@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:greenstem/data/datasources/local/local_delivery_part_database_service.dart';
 import 'package:greenstem/data/datasources/local/local_location_database_service.dart';
+import 'package:greenstem/data/datasources/remote/remote_delivery_part_datasource.dart';
 import 'package:greenstem/data/datasources/remote/remote_location_datasource.dart';
 import 'package:greenstem/data/repositories/location_repository_impl.dart';
 import 'package:greenstem/domain/entities/delivery.dart';
 import 'package:greenstem/domain/services/location_service.dart';
+import '../../../data/repositories/delivery_part_repository_impl.dart';
 import '../../../presentation/widgets/home/active_tab.dart';
 import '../../../presentation/widgets/home/history_tab.dart';
 import '../../../presentation/widgets/home/sliding_tab_switcher.dart';
@@ -33,6 +36,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   late final DeliveryService _deliveryService;
   late final UserService _userService;
   late final DeliveryRepositoryImpl _deliveryRepository;
+  late final DeliveryPartRepositoryImpl _deliveryPartRepository;
   late final UserRepositoryImpl _userRepository;
   late final LocationRepositoryImpl _locationRepository;
 
@@ -86,12 +90,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _locationRepository = LocationRepositoryImpl(
           localLocationDataSource, remoteLocationDataSource);
 
+      final localDeliveryPartDataSource = LocalDeliveryPartDatabaseService();
+      final remoteDeliveryPartDataSource = SupabaseDeliveryPartDataSource();
+      _deliveryPartRepository = DeliveryPartRepositoryImpl(
+          localDeliveryPartDataSource, remoteDeliveryPartDataSource);
+
       final localDeliveryDataSource = LocalDeliveryDatabaseService();
       final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
       _deliveryRepository = DeliveryRepositoryImpl(
           localDeliveryDataSource, remoteDeliveryDataSource);
-      _deliveryService =
-          DeliveryService(_deliveryRepository, _locationRepository);
+      _deliveryService = DeliveryService(
+          _deliveryRepository, _deliveryPartRepository, _locationRepository);
 
       final localUserDataSource = LocalUserDatabaseService();
       final remoteUserDataSource = SupabaseUserDataSource();

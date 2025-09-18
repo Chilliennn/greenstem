@@ -1,3 +1,6 @@
+import 'package:greenstem/domain/entities/delivery_part.dart';
+import 'package:greenstem/domain/repositories/delivery_part_repository.dart';
+
 import '../entities/delivery.dart';
 import '../entities/location.dart';
 import '../repositories/delivery_repository.dart';
@@ -10,9 +13,11 @@ extension _ListExtension<T> on List<T> {
 
 class DeliveryService {
   final DeliveryRepository _deliveryRepository;
+  final DeliveryPartRepository? _deliveryPartRepository;
   final LocationRepository? _locationRepository;
 
-  DeliveryService(this._deliveryRepository, [this._locationRepository]);
+  DeliveryService(this._deliveryRepository,
+      [this._deliveryPartRepository, this._locationRepository]);
 
   // Stream-based reading (offline-first)
   Stream<List<Delivery>> watchAllDeliveries() {
@@ -51,7 +56,7 @@ class DeliveryService {
       // Fallback: return the locationId itself (might be a string location)
       return locationId;
     } catch (e) {
-      print('❌ Error getting location name: $e');
+      print('Error getting location name: $e');
       return locationId; // Fallback to showing the ID
     }
   }
@@ -63,12 +68,36 @@ class DeliveryService {
       final locations = await _locationRepository!.getCachedLocations();
       return locations.where((loc) => loc.locationId == locationId).firstOrNull;
     } catch (e) {
-      print('❌ Error getting location: $e');
+      print('Error getting location: $e');
       return null;
     }
   }
 
-  // Write operations (offline-first)
+  // Delivery part fetching methods
+  Future<Stream<DeliveryPart?>> watchDeliveryPartByDeliveryId(
+      String deliveryId) async {
+    if (_deliveryPartRepository == null) return Stream.value(null);
+
+    try {
+      return await _deliveryPartRepository
+          .watchDeliveryPartByDeliveryId(deliveryId);
+    } catch (e) {
+      throw Exception('Failed to get delivery parts: $e');
+    }
+  }
+
+  Stream<int?> getNumberOfDeliveryPartsByDeliveryId(String deliveryId) {
+    if (_deliveryPartRepository == null) return Stream.value(0);
+
+    try {
+      return _deliveryPartRepository!.getNumberOfDeliveryPartsByDeliveryId(deliveryId);
+    } catch (e) {
+      print('failed to get number of delivery parts: $e');
+      return Stream.value(0);
+    }
+  }
+
+// Write operations (offline-first)
   Future<Delivery> createDelivery(Delivery delivery) async {
     try {
       return await _deliveryRepository.createDelivery(delivery);
@@ -93,7 +122,7 @@ class DeliveryService {
     }
   }
 
-  // Business logic methods
+// Business logic methods
   Future<Delivery> markAsCompleted(String deliveryId) async {
     final deliveryStream = _deliveryRepository.watchDeliveryById(deliveryId);
     final delivery = await deliveryStream.first;
@@ -111,7 +140,7 @@ class DeliveryService {
     return await updateDelivery(updatedDelivery);
   }
 
-  // Cache operations
+// Cache operations
   Future<List<Delivery>> getCachedDeliveries() async {
     try {
       return await _deliveryRepository.getCachedDeliveries();
@@ -120,7 +149,7 @@ class DeliveryService {
     }
   }
 
-  // Sync operations
+// Sync operations
   Future<void> syncData() async {
     try {
       await _deliveryRepository.syncToRemote();

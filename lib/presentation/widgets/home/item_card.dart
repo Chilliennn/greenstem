@@ -174,10 +174,23 @@ class _IncomingCard extends StatelessWidget {
                             color: Colors.white,
                             size: 18,
                           ),
-                          Text(
-                            "n items",
-                            style: TextStyle(color: Colors.grey, fontSize: 12),
-                          )
+                          StreamBuilder<int?>(
+                            stream: deliveryService?.getNumberOfDeliveryPartsByDeliveryId(delivery!.deliveryId),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return Text(
+                                  "loading items",
+                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                );
+                              }
+
+                              final itemCount = snapshot.data ?? 0;
+                              return Text(
+                                "$itemCount items",
+                                style: TextStyle(color: Colors.grey, fontSize: 12),
+                              );
+                            },
+                          ),
                         ],
                       ),
                       SizedBox(
@@ -347,11 +360,23 @@ class _StatusCard extends StatelessWidget {
                               color: Colors.white,
                               size: 18,
                             ),
-                            Text(
-                              "n items",
-                              style:
-                                  TextStyle(color: Colors.grey, fontSize: 12),
-                            )
+                            StreamBuilder<int?>(
+                              stream: deliveryService?.getNumberOfDeliveryPartsByDeliveryId(delivery!.deliveryId),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState == ConnectionState.waiting) {
+                                  return Text(
+                                    "loading items",
+                                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                                  );
+                                }
+
+                                final itemCount = snapshot.data ?? 0;
+                                return Text(
+                                  "$itemCount items",
+                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                );
+                              },
+                            ),
                           ],
                         ),
                         SizedBox(

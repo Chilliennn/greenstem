@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:greenstem/domain/entities/delivery_part.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../models/delivery_part_model.dart';
 import 'database_manager.dart';
@@ -15,10 +16,11 @@ class LocalDeliveryPartDatabaseService {
   Future<Database> get database => DatabaseManager.database;
 
   // Insert or update with LWW
-  Future<DeliveryPartModel> insertOrUpdateDeliveryPart(DeliveryPartModel deliveryPart) async {
+  Future<DeliveryPartModel> insertOrUpdateDeliveryPart(
+      DeliveryPartModel deliveryPart) async {
     final db = await database;
     final existing = await getDeliveryPartByDeliveryId(deliveryPart.deliveryId);
-    
+
     if (existing != null) {
       // Use Last-Write Wins strategy
       if (deliveryPart.isNewerThan(existing)) {
@@ -28,15 +30,15 @@ class LocalDeliveryPartDatabaseService {
           where: 'delivery_id = ?',
           whereArgs: [deliveryPart.deliveryId],
         );
-        print('🔄 Updated delivery part ${deliveryPart.deliveryId} (LWW: newer)');
+        print('Updated delivery part ${deliveryPart.deliveryId} (LWW: newer)');
       } else {
-        print('⏭️ Skipped delivery part ${deliveryPart.deliveryId} (LWW: older)');
+        print('Skipped delivery part ${deliveryPart.deliveryId} (LWW: older)');
         _loadDeliveryParts();
         return existing;
       }
     } else {
       await db.insert(_tableName, deliveryPart.toJson());
-      print('➕ Inserted new delivery part ${deliveryPart.deliveryId}');
+      print('Inserted new delivery part ${deliveryPart.deliveryId}');
     }
 
     _loadDeliveryParts();
@@ -44,9 +46,10 @@ class LocalDeliveryPartDatabaseService {
   }
 
   // Update delivery part with version increment
-  Future<DeliveryPartModel> updateDeliveryPart(DeliveryPartModel deliveryPart) async {
+  Future<DeliveryPartModel> updateDeliveryPart(
+      DeliveryPartModel deliveryPart) async {
     final db = await database;
-    
+
     // Increment version for local updates
     final updatedDeliveryPart = deliveryPart.copyWith(
       version: deliveryPart.version + 1,
@@ -54,7 +57,7 @@ class LocalDeliveryPartDatabaseService {
       needsSync: true,
       isSynced: false,
     );
-    
+
     await db.update(
       _tableName,
       updatedDeliveryPart.toJson(),
@@ -72,24 +75,42 @@ class LocalDeliveryPartDatabaseService {
     return _deliveryPartsController.stream;
   }
 
-  Stream<List<DeliveryPartModel>> watchDeliveryPartsByDeliveryId(String deliveryId) async* {
+  Stream<List<DeliveryPartModel>> watchDeliveryPartsByDeliveryId(
+      String deliveryId) async* {
     _loadDeliveryParts();
     await for (final deliveryParts in _deliveryPartsController.stream) {
       yield deliveryParts.where((dp) => dp.deliveryId == deliveryId).toList();
     }
   }
 
-  Stream<List<DeliveryPartModel>> watchDeliveryPartsByPartId(String partId) async* {
+  Stream<List<DeliveryPartModel>> watchDeliveryPartsByPartId(
+      String partId) async* {
     _loadDeliveryParts();
     await for (final deliveryParts in _deliveryPartsController.stream) {
       yield deliveryParts.where((dp) => dp.partId == partId).toList();
     }
   }
 
-  Stream<DeliveryPartModel?> watchDeliveryPartByDeliveryId(String deliveryId) async* {
+  Stream<DeliveryPartModel?> watchDeliveryPartByDeliveryId(
+      String deliveryId) async* {
     _loadDeliveryParts();
     await for (final deliveryParts in _deliveryPartsController.stream) {
-      yield deliveryParts.where((dp) => dp.deliveryId == deliveryId).firstOrNull;
+      yield deliveryParts
+          .where((dp) => dp.deliveryId == deliveryId)
+          .firstOrNull;
+    }
+  }
+
+  Stream<int?> getNumberOfDeliveryPartsByDeliveryId(String deliveryId) async* {
+    _loadDeliveryParts();
+
+    await for (final List<DeliveryPartModel> deliveryParts
+        in _deliveryPartsController.stream) {
+      final totalQuantity = deliveryParts
+          .where((DeliveryPartModel dp) => dp.deliveryId == deliveryId)
+          .fold<int>(0, (sum, dp) => sum + (dp.quantity ?? 0));
+
+      yield totalQuantity;
     }
   }
 
@@ -114,7 +135,8 @@ class LocalDeliveryPartDatabaseService {
     return result.map((json) => DeliveryPartModel.fromJson(json)).toList();
   }
 
-  Future<List<DeliveryPartModel>> getDeliveryPartsByDeliveryId(String deliveryId) async {
+  Future<List<DeliveryPartModel>> getDeliveryPartsByDeliveryId(
+      String deliveryId) async {
     final db = await database;
     final result = await db.query(
       _tableName,
@@ -125,7 +147,8 @@ class LocalDeliveryPartDatabaseService {
     return result.map((json) => DeliveryPartModel.fromJson(json)).toList();
   }
 
-  Future<DeliveryPartModel?> getDeliveryPartByDeliveryId(String deliveryId) async {
+  Future<DeliveryPartModel?> getDeliveryPartByDeliveryId(
+      String deliveryId) async {
     final db = await database;
     final result = await db.query(
       _tableName,
@@ -163,7 +186,8 @@ class LocalDeliveryPartDatabaseService {
     _loadDeliveryParts();
   }
 
-  Future<DeliveryPartModel> insertDeliveryPart(DeliveryPartModel deliveryPart) async {
+  Future<DeliveryPartModel> insertDeliveryPart(
+      DeliveryPartModel deliveryPart) async {
     final db = await database;
     await db.insert(_tableName, deliveryPart.toJson());
     _loadDeliveryParts();
@@ -195,13 +219,13 @@ class LocalDeliveryPartDatabaseService {
         where: 'delivery_id = ?',
         whereArgs: [deliveryId],
       );
-      
-      print('✅ Deleted all delivery parts for delivery $deliveryId locally');
+
+      print('Deleted all delivery parts for delivery $deliveryId locally');
       if (!_deliveryPartsController.isClosed) {
         _loadDeliveryParts();
       }
     } catch (e) {
-      print('❌ Error deleting delivery parts for delivery $deliveryId: $e');
+      print('Error deleting delivery parts for delivery $deliveryId: $e');
       throw Exception('Failed to delete delivery parts locally: $e');
     }
   }
