@@ -99,6 +99,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
       _deliveryRepository = DeliveryRepositoryImpl(
           localDeliveryDataSource, remoteDeliveryDataSource);
+
       _deliveryService = DeliveryService(
           _deliveryRepository, _deliveryPartRepository, _locationRepository);
 

@@ -24,7 +24,7 @@ class DeliveryService {
   }
 
   Stream<List<Delivery>> watchDeliveryByUserId(String userId) {
-    return _deliveryRepository.watchDeliveryByUserId(userId);
+    return _deliveryRepository.watchDeliveryByUserIdSortByDueDate(userId);
   }
 
   Stream<Delivery?> watchDeliveryById(String id) {
@@ -71,16 +71,26 @@ class DeliveryService {
   }
 
   // new method to get coordinates for distance calculation
-  Future<Map<String, double?>> getDeliveryCoordinates(String pickupLocationId, String deliveryLocationId) async {
+  Future<Map<String, double?>> getDeliveryCoordinates(
+      String pickupLocationId, String deliveryLocationId) async {
     if (_locationRepository == null) {
-      return {'pickupLat': null, 'pickupLon': null, 'deliveryLat': null, 'deliveryLon': null};
+      return {
+        'pickupLat': null,
+        'pickupLon': null,
+        'deliveryLat': null,
+        'deliveryLon': null
+      };
     }
 
     try {
       final locations = await _locationRepository!.getCachedLocations();
-      
-      final pickupLocation = locations.where((loc) => loc.locationId == pickupLocationId).firstOrNull;
-      final deliveryLocation = locations.where((loc) => loc.locationId == deliveryLocationId).firstOrNull;
+
+      final pickupLocation = locations
+          .where((loc) => loc.locationId == pickupLocationId)
+          .firstOrNull;
+      final deliveryLocation = locations
+          .where((loc) => loc.locationId == deliveryLocationId)
+          .firstOrNull;
 
       return {
         'pickupLat': pickupLocation?.latitude,
@@ -90,7 +100,12 @@ class DeliveryService {
       };
     } catch (e) {
       print('error getting delivery coordinates: $e');
-      return {'pickupLat': null, 'pickupLon': null, 'deliveryLat': null, 'deliveryLon': null};
+      return {
+        'pickupLat': null,
+        'pickupLon': null,
+        'deliveryLat': null,
+        'deliveryLon': null
+      };
     }
   }
 
@@ -111,7 +126,8 @@ class DeliveryService {
     if (_deliveryPartRepository == null) return Stream.value(0);
 
     try {
-      return _deliveryPartRepository!.getNumberOfDeliveryPartsByDeliveryId(deliveryId);
+      return _deliveryPartRepository!
+          .getNumberOfDeliveryPartsByDeliveryId(deliveryId);
     } catch (e) {
       print('failed to get number of delivery parts: $e');
       return Stream.value(0);

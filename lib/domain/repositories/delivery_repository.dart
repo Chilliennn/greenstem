@@ -4,7 +4,7 @@ abstract class DeliveryRepository {
   // Offline-first read operations (streams)
   Stream<List<Delivery>> watchAllDeliveries();
 
-  Stream<List<Delivery>> watchDeliveryByUserId(String userId);
+  Stream<List<Delivery>> watchDeliveryByUserIdSortByDueDate(String userId);
 
   Stream<Delivery?> watchDeliveryById(String id);
 

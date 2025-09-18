@@ -58,7 +58,15 @@ class Delivery {
   }
 
   // Business logic
-  bool get isPending => status?.toLowerCase() == 'pending';
+  bool get isIncoming => status?.toLowerCase() == 'incoming';
+
+  bool get isAwaiting => status?.toLowerCase() == 'awaiting';
+
+  bool get isPickedUp => status?.toLowerCase() == 'picked up';
+
+  bool get isEnRoute => status?.toLowerCase() == 'en route';
+
+  bool get isDelivered => status?.toLowerCase() == 'delivered';
 
   bool get isCompleted => status?.toLowerCase() == 'completed';
 
