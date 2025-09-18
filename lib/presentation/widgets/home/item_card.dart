@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:greenstem/domain/entities/delivery.dart';
-import 'package:greenstem/presentation/screens/profiles/profile_screen.dart';
 import 'package:intl/intl.dart';
 import '../../../domain/services/delivery_service.dart';
 import '../../../core/utils/distance_calculator.dart';
+
+_setUseApi() => false;
 
 class ItemCard extends StatefulWidget {
   final String state;
@@ -77,7 +78,9 @@ class _IncomingCard extends StatelessWidget {
   const _IncomingCard({this.delivery, this.deliveryService});
 
   Future<String> _calculateDistance() async {
-    if (delivery?.pickupLocation == null || delivery?.deliveryLocation == null || deliveryService == null) {
+    if (delivery?.pickupLocation == null ||
+        delivery?.deliveryLocation == null ||
+        deliveryService == null) {
       return 'n/a';
     }
 
@@ -92,7 +95,7 @@ class _IncomingCard extends StatelessWidget {
         coordinates['pickupLon'],
         coordinates['deliveryLat'],
         coordinates['deliveryLon'],
-        useApi: true, // set to false if you don't want to use external api
+        useApi: _setUseApi(),
       );
 
       return DistanceCalculator.formatDistance(distance);
@@ -202,19 +205,24 @@ class _IncomingCard extends StatelessWidget {
                             size: 18,
                           ),
                           StreamBuilder<int?>(
-                            stream: deliveryService?.getNumberOfDeliveryPartsByDeliveryId(delivery!.deliveryId),
+                            stream: deliveryService
+                                ?.getNumberOfDeliveryPartsByDeliveryId(
+                                    delivery!.deliveryId),
                             builder: (context, snapshot) {
-                              if (snapshot.connectionState == ConnectionState.waiting) {
+                              if (snapshot.connectionState ==
+                                  ConnectionState.waiting) {
                                 return Text(
                                   "loading items",
-                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                  style: TextStyle(
+                                      color: Colors.grey, fontSize: 12),
                                 );
                               }
 
                               final itemCount = snapshot.data ?? 0;
                               return Text(
                                 "$itemCount items",
-                                style: TextStyle(color: Colors.grey, fontSize: 12),
+                                style:
+                                    TextStyle(color: Colors.grey, fontSize: 12),
                               );
                             },
                           ),
@@ -234,16 +242,19 @@ class _IncomingCard extends StatelessWidget {
                           FutureBuilder<String>(
                             future: _calculateDistance(),
                             builder: (context, snapshot) {
-                              if (snapshot.connectionState == ConnectionState.waiting) {
+                              if (snapshot.connectionState ==
+                                  ConnectionState.waiting) {
                                 return Text(
                                   "calculating...",
-                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                  style: TextStyle(
+                                      color: Colors.grey, fontSize: 12),
                                 );
                               }
 
                               return Text(
                                 snapshot.data ?? 'n/a',
-                                style: TextStyle(color: Colors.grey, fontSize: 12),
+                                style:
+                                    TextStyle(color: Colors.grey, fontSize: 12),
                               );
                             },
                           ),
@@ -252,7 +263,56 @@ class _IncomingCard extends StatelessWidget {
                     ],
                   ),
                   TextButton(
-                    onPressed: () {},
+                    onPressed: () async {
+                      if (delivery != null && deliveryService != null) {
+                        try {
+                          // show loading
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (context) => const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+
+                          // update delivery
+                          final updatedDelivery = delivery!.copyWith(
+                            status: 'awaiting',
+                            updatedAt: DateTime.now(),
+                          );
+
+                          await deliveryService!
+                              .updateDelivery(updatedDelivery);
+
+                          // close loading dialog
+                          if (context.mounted) {
+                            Navigator.pop(context);
+
+                            // show success message
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content:
+                                    Text('Delivery accepted successfully!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          // close loading dialog
+                          if (context.mounted) {
+                            Navigator.pop(context);
+
+                            // show error message
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to accept delivery: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    },
                     style: TextButton.styleFrom(
                       backgroundColor: Colors.black,
                       foregroundColor: Colors.white,
@@ -293,7 +353,9 @@ class _StatusCard extends StatelessWidget {
   });
 
   Future<String> _calculateDistance() async {
-    if (delivery?.pickupLocation == null || delivery?.deliveryLocation == null || deliveryService == null) {
+    if (delivery?.pickupLocation == null ||
+        delivery?.deliveryLocation == null ||
+        deliveryService == null) {
       return 'n/a';
     }
 
@@ -308,7 +370,7 @@ class _StatusCard extends StatelessWidget {
         coordinates['pickupLon'],
         coordinates['deliveryLat'],
         coordinates['deliveryLon'],
-        useApi: true, // set to false if you don't want to use external api
+        useApi: _setUseApi(),
       );
 
       return DistanceCalculator.formatDistance(distance);
@@ -421,19 +483,24 @@ class _StatusCard extends StatelessWidget {
                               size: 18,
                             ),
                             StreamBuilder<int?>(
-                              stream: deliveryService?.getNumberOfDeliveryPartsByDeliveryId(delivery!.deliveryId),
+                              stream: deliveryService
+                                  ?.getNumberOfDeliveryPartsByDeliveryId(
+                                      delivery!.deliveryId),
                               builder: (context, snapshot) {
-                                if (snapshot.connectionState == ConnectionState.waiting) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
                                   return Text(
                                     "loading items",
-                                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                                    style: TextStyle(
+                                        color: Colors.grey, fontSize: 12),
                                   );
                                 }
 
                                 final itemCount = snapshot.data ?? 0;
                                 return Text(
                                   "$itemCount items",
-                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                  style: TextStyle(
+                                      color: Colors.grey, fontSize: 12),
                                 );
                               },
                             ),
@@ -453,16 +520,19 @@ class _StatusCard extends StatelessWidget {
                             FutureBuilder<String>(
                               future: _calculateDistance(),
                               builder: (context, snapshot) {
-                                if (snapshot.connectionState == ConnectionState.waiting) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
                                   return Text(
                                     "calculating...",
-                                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                                    style: TextStyle(
+                                        color: Colors.grey, fontSize: 12),
                                   );
                                 }
 
                                 return Text(
                                   snapshot.data ?? 'n/a',
-                                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                                  style: TextStyle(
+                                      color: Colors.grey, fontSize: 12),
                                 );
                               },
                             ),

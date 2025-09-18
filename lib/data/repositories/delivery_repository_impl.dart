@@ -158,10 +158,16 @@ class DeliveryRepositoryImpl implements DeliveryRepository {
   }
 
   @override
-  Stream<List<Delivery>> watchDeliveryByUserId(String userId) {
+  Stream<List<Delivery>> watchDeliveryByUserIdSortByDueDate(String userId) {
     return _localDataSource.watchDeliveryByUserId(userId).map(
-          (models) => models.map((model) => model.toEntity()).toList(),
-        );
+      (models) {
+        final deliveries = models.map((model) => model.toEntity()).toList();
+
+        deliveries.sort((a, b) => a.dueDatetime!.compareTo(b.dueDatetime!));
+
+        return deliveries;
+      },
+    );
   }
 
   @override

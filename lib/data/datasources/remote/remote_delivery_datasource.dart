@@ -41,17 +41,16 @@ class SupabaseDeliveryDataSource implements RemoteDeliveryDataSource {
             schema: 'public',
             table: 'delivery',
             callback: (payload) {
-              print(
-                  '🔄 Real-time delivery change detected: ${payload.eventType}');
-              print('📊 Payload: ${payload.newRecord}');
+              print('Real-time delivery change detected: ${payload.eventType}');
+              print('Payload: ${payload.newRecord}');
               _refreshDeliveries();
             },
           )
           .subscribe();
 
-      print('✅ Real-time listener initialized for deliveries');
+      print('Real-time listener initialized for deliveries');
     } catch (e) {
-      print('❌ Failed to initialize real-time listener: $e');
+      print('Failed to initialize real-time listener: $e');
     }
   }
 
@@ -66,9 +65,9 @@ class SupabaseDeliveryDataSource implements RemoteDeliveryDataSource {
     try {
       final deliveries = await getAllDeliveries();
       _deliveriesController.add(deliveries);
-      print('📡 Remote deliveries refreshed: ${deliveries.length} items');
+      print('Remote deliveries refreshed: ${deliveries.length} items');
     } catch (e) {
-      print('❌ Error refreshing deliveries: $e');
+      print('Error refreshing deliveries: $e');
     }
   }
 
@@ -91,10 +90,10 @@ class SupabaseDeliveryDataSource implements RemoteDeliveryDataSource {
       final deliveries =
           data.map((json) => DeliveryModel.fromSupabaseJson(json)).toList();
 
-      print('📥 Fetched ${deliveries.length} deliveries from Supabase');
+      print('Fetched ${deliveries.length} deliveries from Supabase');
       return deliveries;
     } catch (e) {
-      print('❌ Error fetching deliveries: $e');
+      print('Error fetching deliveries: $e');
       throw NetworkException('Failed to fetch deliveries: $e');
     }
   }
@@ -111,7 +110,7 @@ class SupabaseDeliveryDataSource implements RemoteDeliveryDataSource {
       if (response == null) return null;
       return DeliveryModel.fromSupabaseJson(response);
     } catch (e) {
-      print('❌ Error fetching delivery $id: $e');
+      print('Error fetching delivery $id: $e');
       throw NetworkException('Failed to fetch delivery: $e');
     }
   }
@@ -119,7 +118,7 @@ class SupabaseDeliveryDataSource implements RemoteDeliveryDataSource {
   @override
   Future<DeliveryModel> createDelivery(DeliveryModel delivery) async {
     try {
-      print('📤 Creating delivery ${delivery.deliveryId} in Supabase');
+      print('Creating delivery ${delivery.deliveryId} in Supabase');
 
       final response = await _supabase
           .from('delivery')
@@ -128,10 +127,10 @@ class SupabaseDeliveryDataSource implements RemoteDeliveryDataSource {
           .single();
 
       final created = DeliveryModel.fromSupabaseJson(response);
-      print('✅ Created delivery ${created.deliveryId} in Supabase');
+      print('Created delivery ${created.deliveryId} in Supabase');
       return created;
     } catch (e) {
-      print('❌ Error creating delivery: $e');
+      print('Error creating delivery: $e');
       throw NetworkException('Failed to create delivery: $e');
     }
   }
@@ -139,7 +138,7 @@ class SupabaseDeliveryDataSource implements RemoteDeliveryDataSource {
   @override
   Future<DeliveryModel> updateDelivery(DeliveryModel delivery) async {
     try {
-      print('📤 Updating delivery ${delivery.deliveryId} in Supabase');
+      print('Updating delivery ${delivery.deliveryId} in Supabase');
 
       final response = await _supabase
           .from('delivery')
@@ -149,10 +148,10 @@ class SupabaseDeliveryDataSource implements RemoteDeliveryDataSource {
           .single();
 
       final updated = DeliveryModel.fromSupabaseJson(response);
-      print('✅ Updated delivery ${updated.deliveryId} in Supabase');
+      print('Updated delivery ${updated.deliveryId} in Supabase');
       return updated;
     } catch (e) {
-      print('❌ Error updating delivery: $e');
+      print('Error updating delivery: $e');
       throw NetworkException('Failed to update delivery: $e');
     }
   }
@@ -160,13 +159,13 @@ class SupabaseDeliveryDataSource implements RemoteDeliveryDataSource {
   @override
   Future<void> deleteDelivery(String id) async {
     try {
-      print('📤 Deleting delivery $id from Supabase');
+      print('Deleting delivery $id from Supabase');
 
       await _supabase.from('delivery').delete().eq('delivery_id', id);
 
-      print('✅ Deleted delivery $id from Supabase');
+      print('Deleted delivery $id from Supabase');
     } catch (e) {
-      print('❌ Error deleting delivery: $e');
+      print('Error deleting delivery: $e');
       throw NetworkException('Failed to delete delivery: $e');
     }
   }

@@ -51,7 +51,7 @@ class LocalDeliveryDatabaseService {
         _deliveriesController.add(deliveries);
       }
     } catch (e) {
-      print('❌ Error loading deliveries: $e');
+      print('Error loading deliveries: $e');
       // Only add error if controller is still active
       if (!_deliveriesController.isClosed) {
         _deliveriesController.addError(e);
@@ -95,15 +95,15 @@ class LocalDeliveryDatabaseService {
           where: 'delivery_id = ?',
           whereArgs: [delivery.deliveryId],
         );
-        print('🔄 Updated delivery ${delivery.deliveryId} (LWW: newer)');
+        print('Updated delivery ${delivery.deliveryId} (LWW: newer)');
       } else {
-        print('⏭️ Skipped delivery ${delivery.deliveryId} (LWW: older)');
+        print('Skipped delivery ${delivery.deliveryId} (LWW: older)');
         _loadDeliveries();
         return existing;
       }
     } else {
       await db.insert(_tableName, delivery.toJson());
-      print('➕ Inserted new delivery ${delivery.deliveryId}');
+      print('Inserted new delivery ${delivery.deliveryId}');
     }
 
     _loadDeliveries();
