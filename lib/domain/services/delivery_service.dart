@@ -19,6 +19,10 @@ class DeliveryService {
     return _deliveryRepository.watchAllDeliveries();
   }
 
+  Stream<List<Delivery>> watchDeliveryByUserId(String userId) {
+    return _deliveryRepository.watchDeliveryByUserId(userId);
+  }
+
   Stream<Delivery?> watchDeliveryById(String id) {
     return _deliveryRepository.watchDeliveryById(id);
   }
@@ -31,7 +35,7 @@ class DeliveryService {
     return _deliveryRepository.watchDeliveriesByStatus('completed');
   }
 
-  // Location fetching methods - USING ACTUAL EXISTING METHODS
+  // Location fetching methods
   Future<String> getLocationName(String? locationId) async {
     if (locationId == null || locationId.isEmpty) return 'Unknown Location';
 
@@ -39,9 +43,8 @@ class DeliveryService {
       // If locationRepository is available, fetch from it
       if (_locationRepository != null) {
         final locations = await _locationRepository!.getCachedLocations();
-        final location = locations
-            .where((loc) => loc.locationId == locationId)
-            .firstOrNull;
+        final location =
+            locations.where((loc) => loc.locationId == locationId).firstOrNull;
         return location?.name ?? locationId; // Fallback to ID if name not found
       }
 
@@ -130,5 +133,6 @@ class DeliveryService {
     }
   }
 
-  Future<bool> hasNetworkConnection() => _deliveryRepository.hasNetworkConnection();
+  Future<bool> hasNetworkConnection() =>
+      _deliveryRepository.hasNetworkConnection();
 }

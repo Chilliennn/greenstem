@@ -20,6 +20,7 @@ import '../../../data/datasources/remote/remote_delivery_datasource.dart';
 import '../../../data/datasources/remote/remote_user_datasource.dart';
 import '../../../core/services/network_service.dart';
 import '../profiles/profile_screen.dart';
+import '../../providers/auth_provider.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -31,17 +32,16 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   late final DeliveryService _deliveryService;
   late final UserService _userService;
-  late final LocationService _locationService;
   late final DeliveryRepositoryImpl _deliveryRepository;
   late final UserRepositoryImpl _userRepository;
-  late final LocationRepositoryImpl _locationRepository; // Add this line
+  late final LocationRepositoryImpl _locationRepository;
 
   bool _isOnline = false;
-  User? _currentUser;
   StreamSubscription<bool>? _connectivitySubscription;
-  StreamSubscription<User?>? _userSubscription;
   bool isActiveTab = true;
   bool _isSyncing = false;
+  bool _servicesInitialized = false;
+  User? _currentUser; // cache the user here
 
   @override
   void initState() {
@@ -49,64 +49,64 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _initializeServices();
     _checkConnectivity();
     _listenToConnectivity();
-    _loadCurrentUser();
-
-    // debug data synchronization
     _debugDataSync();
   }
 
   Future<void> _debugDataSync() async {
-    print('DEBUG: Checking data synchronization...');
+    print('debug: checking data synchronization...');
 
     try {
-      // check local data
       final localDeliveries = await _deliveryRepository.getCachedDeliveries();
-      print('Local deliveries count: ${localDeliveries.length}');
+      print('local deliveries count: ${localDeliveries.length}');
 
       if (await NetworkService.hasConnection()) {
-        print('Network is available, checking remote data...');
+        print('network is available, checking remote data...');
 
-        // try to fetch from remote
         final remoteDataSource = SupabaseDeliveryDataSource();
         final remoteDeliveries = await remoteDataSource.getAllDeliveries();
-        print('Remote deliveries count: ${remoteDeliveries.length}');
+        print('remote deliveries count: ${remoteDeliveries.length}');
 
-        // force a sync
-        print('Forcing sync from remote...');
+        print('forcing sync from remote...');
         await _deliveryRepository.syncFromRemote();
 
-        // check local again
         final localAfterSync = await _deliveryRepository.getCachedDeliveries();
-        print('Local deliveries after sync: ${localAfterSync.length}');
+        print('local deliveries after sync: ${localAfterSync.length}');
       } else {
-        print('No network connection');
+        print('no network connection');
       }
     } catch (e) {
-      print('Debug sync error: $e');
+      print('debug sync error: $e');
     }
   }
 
   void _initializeServices() {
-    // location services (initialize first)
-    final localLocationDataSource = LocalLocationDatabaseService();
-    final remoteLocationDataSource = SupabaseLocationDataSource();
-    _locationRepository = LocationRepositoryImpl(
-        localLocationDataSource, remoteLocationDataSource);
-    _locationService = LocationService(_locationRepository);
+    try {
+      final localLocationDataSource = LocalLocationDatabaseService();
+      final remoteLocationDataSource = SupabaseLocationDataSource();
+      _locationRepository = LocationRepositoryImpl(
+          localLocationDataSource, remoteLocationDataSource);
 
-    // delivery services (pass location repository)
-    final localDeliveryDataSource = LocalDeliveryDatabaseService();
-    final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
-    _deliveryRepository = DeliveryRepositoryImpl(
-        localDeliveryDataSource, remoteDeliveryDataSource);
-    _deliveryService = DeliveryService(_deliveryRepository, _locationRepository); // Pass location repository here
+      final localDeliveryDataSource = LocalDeliveryDatabaseService();
+      final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
+      _deliveryRepository = DeliveryRepositoryImpl(
+          localDeliveryDataSource, remoteDeliveryDataSource);
+      _deliveryService =
+          DeliveryService(_deliveryRepository, _locationRepository);
 
-    // user services
-    final localUserDataSource = LocalUserDatabaseService();
-    final remoteUserDataSource = SupabaseUserDataSource();
-    _userRepository =
-        UserRepositoryImpl(localUserDataSource, remoteUserDataSource);
-    _userService = UserService(_userRepository);
+      final localUserDataSource = LocalUserDatabaseService();
+      final remoteUserDataSource = SupabaseUserDataSource();
+      _userRepository =
+          UserRepositoryImpl(localUserDataSource, remoteUserDataSource);
+      _userService = UserService(_userRepository);
+
+      setState(() {
+        _servicesInitialized = true;
+      });
+
+      print('all services initialized successfully');
+    } catch (e) {
+      print('error initializing services: $e');
+    }
   }
 
   Future<void> _checkConnectivity() async {
@@ -114,7 +114,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (mounted) {
       setState(() => _isOnline = isOnline);
 
-      // trigger sync when we come online
       if (isOnline) {
         _syncAllData();
       }
@@ -127,7 +126,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (mounted) {
         setState(() => _isOnline = isConnected);
 
-        // trigger sync when connectivity changes to online
         if (isConnected) {
           _syncAllData();
         }
@@ -140,12 +138,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       setState(() {
         _isSyncing = true;
       });
-      print('Starting data synchronization...');
+      print('starting data synchronization...');
       await _deliveryRepository.syncFromRemote();
       await _userRepository.syncFromRemote();
-      print('Data synchronization completed');
+      print('data synchronization completed');
     } catch (e) {
-      print('Sync error: $e');
+      print('sync error: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -155,15 +153,155 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  void _loadCurrentUser() {
-    _userSubscription = _userService.watchCurrentUser().listen((user) {
-      if (mounted) {
-        setState(() {
-          _currentUser = user;
-        });
-      }
-    });
+  Future<User?> _getCurrentUser() async {
+    if (_currentUser != null) {
+      return _currentUser; // return cached user
+    }
+
+    try {
+      final userService = ref.read(userServiceProvider);
+      final user = await userService.watchCurrentUser().first;
+      _currentUser = user; // cache the user
+      return user;
+    } catch (e) {
+      print('error getting current user: $e');
+      return null;
+    }
   }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_servicesInitialized) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF111111),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(
+                'Initializing services...',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return FutureBuilder<User?>(
+      future: _getCurrentUser(), // get user once, not stream
+      builder: (context, userSnapshot) {
+        print(
+            'futurebuilder: connectionstate=${userSnapshot.connectionState}, hasdata=${userSnapshot.hasData}, haserror=${userSnapshot.hasError}');
+
+        if (userSnapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: Color(0xFF111111),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text(
+                    'Loading user data...',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        if (userSnapshot.hasError) {
+          print('home screen user error: ${userSnapshot.error}');
+          return Scaffold(
+            backgroundColor: const Color(0xFF111111),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error, size: 64, color: Colors.red),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error loading user: ${userSnapshot.error}',
+                    style: const TextStyle(color: Colors.white),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      _checkConnectivity();
+                      if (_isOnline) _syncAllData();
+                    },
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final currentUser = userSnapshot.data;
+        if (currentUser == null) {
+          return const Scaffold(
+            backgroundColor: Color(0xFF111111),
+            body: Center(
+              child: Text(
+                'No user logged in',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          );
+        }
+
+        print('home screen: current user loaded: ${currentUser.userId}');
+
+        // main ui structure - this won't rebuild when user changes
+        return _HomeContent(
+          currentUser: currentUser,
+          deliveryService: _deliveryService,
+          isOnline: _isOnline,
+          onSyncData: _syncAllData,
+          onCheckConnectivity: _checkConnectivity,
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    _deliveryRepository.dispose();
+    _userRepository.dispose();
+    super.dispose();
+  }
+}
+
+// separate widget for main content to prevent rebuilds
+class _HomeContent extends StatefulWidget {
+  final User currentUser;
+  final DeliveryService deliveryService;
+  final bool isOnline;
+  final VoidCallback onSyncData;
+  final VoidCallback onCheckConnectivity;
+
+  const _HomeContent({
+    required this.currentUser,
+    required this.deliveryService,
+    required this.isOnline,
+    required this.onSyncData,
+    required this.onCheckConnectivity,
+  });
+
+  @override
+  State<_HomeContent> createState() => _HomeContentState();
+}
+
+class _HomeContentState extends State<_HomeContent> {
+  bool isActiveTab = true;
 
   @override
   Widget build(BuildContext context) {
@@ -189,9 +327,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: CircleAvatar(
                 radius: 20,
                 backgroundColor: Colors.grey[300],
-                child: _currentUser?.username != null
+                child: widget.currentUser.username?.isNotEmpty == true
                     ? Text(
-                        _currentUser!.username![0].toUpperCase(),
+                        widget.currentUser.username![0].toUpperCase(),
                         style: const TextStyle(
                           color: Colors.black,
                           fontWeight: FontWeight.bold,
@@ -219,13 +357,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 24),
             Expanded(
               child: StreamBuilder<List<Delivery>>(
-                stream: _deliveryService.watchAllDeliveries(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                stream: widget.deliveryService
+                    .watchDeliveryByUserId(widget.currentUser.userId),
+                builder: (context, deliverySnapshot) {
+                  print(
+                      'delivery streambuilder state: ${deliverySnapshot.connectionState}');
+                  print('has delivery data: ${deliverySnapshot.hasData}');
+                  print(
+                      'delivery data length: ${deliverySnapshot.data?.length ?? 0}');
+
+                  if (deliverySnapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    return const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 16),
+                          Text(
+                            'Loading deliveries...',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    );
                   }
 
-                  if (snapshot.hasError) {
+                  if (deliverySnapshot.hasError) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -233,15 +391,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           const Icon(Icons.error, size: 64, color: Colors.red),
                           const SizedBox(height: 16),
                           Text(
-                            'Error: ${snapshot.error}',
+                            'Error: ${deliverySnapshot.error}',
                             style: const TextStyle(color: Colors.white),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 16),
                           ElevatedButton(
                             onPressed: () {
-                              _checkConnectivity();
-                              if (_isOnline) _syncAllData();
+                              widget.onCheckConnectivity();
+                              if (widget.isOnline) widget.onSyncData();
                             },
                             child: const Text('Retry'),
                           ),
@@ -250,12 +408,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     );
                   }
 
-                  final deliveries = snapshot.data ?? [];
-
+                  final deliveries = deliverySnapshot.data ?? [];
                   print(
-                      'StreamBuilder received ${deliveries.length} deliveries');
+                      'streambuilder received ${deliveries.length} deliveries for user ${widget.currentUser.userId}');
 
-                  // filter deliveries based on tab
+                  if (deliveries.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.inbox, size: 64, color: Colors.grey),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'No deliveries found',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'User: ${widget.currentUser.fullName}',
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () {
+                              if (widget.isOnline) widget.onSyncData();
+                            },
+                            child: const Text('Refresh'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
                   final filteredDeliveries = isActiveTab
                       ? deliveries
                           .where((d) =>
@@ -271,11 +462,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   return isActiveTab
                       ? ActiveTab(
                           deliveries: filteredDeliveries,
-                          deliveryService: _deliveryService,
+                          deliveryService: widget.deliveryService,
                         )
                       : HistoryTab(
                           deliveries: filteredDeliveries,
-                          deliveryService: _deliveryService,
+                          deliveryService: widget.deliveryService,
                         );
                 },
               ),
@@ -284,14 +475,5 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _connectivitySubscription?.cancel();
-    _userSubscription?.cancel();
-    _deliveryRepository.dispose();
-    _userRepository.dispose();
-    super.dispose();
   }
 }
