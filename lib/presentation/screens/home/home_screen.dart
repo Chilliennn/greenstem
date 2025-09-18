@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:greenstem/data/datasources/local/local_delivery_part_database_service.dart';
@@ -179,6 +180,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  // Add this method to get profile image - same logic as profile_screen.dart
+  ImageProvider? _getProfileImage(User user) {
+    if (user.profilePath == null || user.profilePath!.isEmpty) {
+      return null;
+    }
+
+    if (user.profilePath!.startsWith('/')) {
+      final File imageFile = File(user.profilePath!);
+      if (imageFile.existsSync()) {
+        return FileImage(imageFile);
+      }
+    }
+
+    if (user.profilePath!.startsWith('http')) {
+      return NetworkImage(user.profilePath!);
+    }
+
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_servicesInitialized) {
@@ -276,6 +297,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           isOnline: _isOnline,
           onSyncData: _syncAllData,
           onCheckConnectivity: _checkConnectivity,
+          getProfileImage: _getProfileImage, // Pass the method
         );
       },
     );
@@ -297,6 +319,7 @@ class _HomeContent extends StatefulWidget {
   final bool isOnline;
   final VoidCallback onSyncData;
   final VoidCallback onCheckConnectivity;
+  final ImageProvider? Function(User) getProfileImage; // Add this parameter
 
   const _HomeContent({
     required this.currentUser,
@@ -304,6 +327,7 @@ class _HomeContent extends StatefulWidget {
     required this.isOnline,
     required this.onSyncData,
     required this.onCheckConnectivity,
+    required this.getProfileImage, // Add this parameter
   });
 
   @override
@@ -337,15 +361,18 @@ class _HomeContentState extends State<_HomeContent> {
               child: CircleAvatar(
                 radius: 20,
                 backgroundColor: Colors.grey[300],
-                child: widget.currentUser.username?.isNotEmpty == true
-                    ? Text(
-                        widget.currentUser.username![0].toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                    : const Icon(Icons.person, color: Colors.black),
+                backgroundImage: widget.getProfileImage(widget.currentUser), // Use the profile image
+                child: widget.getProfileImage(widget.currentUser) == null
+                    ? (widget.currentUser.username?.isNotEmpty == true
+                        ? Text(
+                            widget.currentUser.username![0].toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : const Icon(Icons.person, color: Colors.black))
+                    : null, // Don't show child if we have an image
               ),
             ),
           ),
