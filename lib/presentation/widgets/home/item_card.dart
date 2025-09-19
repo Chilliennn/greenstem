@@ -5,6 +5,8 @@ import '../../../domain/services/delivery_service.dart';
 import '../../../core/utils/distance_calculator.dart';
 import '../../../presentation/widgets/delivery_detail/picked_up.dart';
 import '../../../presentation/screens/delivery_detail/delivery_detail_screen.dart';
+import '../../../presentation/widgets/delivery_detail/awaiting.dart';
+import '../../../presentation/widgets/delivery_detail/en_route.dart'; 
 
 
 _setUseApi() => false;
@@ -434,12 +436,28 @@ class _StatusCard extends StatelessWidget {
     return GestureDetector(
         onTap: () {
           if (delivery != null) {
-            if (label == "Picked up") {
-              // Navigate to PickedUpPage for picked up deliveries
+            if (label == "Awaiting") {
+              // Add navigation to AwaitingPage
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => AwaitingPage(delivery: delivery!),
+                ),
+              );
+            } else if (label == "Picked up") {
+              // Direct navigation to PickedUpPage for picked up deliveries
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) => PickedUpPage(delivery: delivery!),
+                ),
+              );
+            } else if (label == "En Route") {
+              // Add navigation to EnRoutePage
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EnRoutePage(delivery: delivery!),
                 ),
               );
             } else {
@@ -449,7 +467,7 @@ class _StatusCard extends StatelessWidget {
                 MaterialPageRoute(
                   builder: (context) => DeliveryDetailScreen(
                     delivery: delivery!,
-                    onDeliveryUpdated: onDeliveryUpdated ?? (_) {}, // Use provided callback or dummy
+                    onDeliveryUpdated: onDeliveryUpdated ?? (_) {},
                   ),
                 ),
               );
