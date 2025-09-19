@@ -7,6 +7,7 @@ import '../../../data/datasources/local/local_delivery_database_service.dart';
 import '../../../data/datasources/remote/remote_delivery_datasource.dart';
 import '../../../core/services/network_service.dart';
 import '../profiles/profile_screen.dart';
+import '../../widgets/delivery_detail/picked_up.dart';
 
 class DeliveryDetailScreen extends StatefulWidget {
   final Delivery delivery;
@@ -176,7 +177,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
           children: [
             ElevatedButton.icon(
               onPressed:
-                  _isUpdating ? null : () => _updateDeliveryStatus('awaiting'),
+              _isUpdating ? null : () => _updateDeliveryStatus('awaiting'),
               icon: const Icon(Icons.schedule),
               label: const Text('Mark as Awaiting'),
               style: ElevatedButton.styleFrom(
@@ -193,7 +194,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
           children: [
             ElevatedButton.icon(
               onPressed:
-                  _isUpdating ? null : () => _updateDeliveryStatus('picked up'),
+              _isUpdating ? null : () => _updateDeliveryStatus('picked up'),
               icon: const Icon(Icons.local_shipping),
               label: const Text('Mark as Picked Up'),
               style: ElevatedButton.styleFrom(
@@ -210,13 +211,33 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
           children: [
             ElevatedButton.icon(
               onPressed:
-                  _isUpdating ? null : () => _updateDeliveryStatus('en route'),
+              _isUpdating ? null : () => _updateDeliveryStatus('en route'),
               icon: const Icon(Icons.navigation),
               label: const Text('Mark as En Route'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.purple,
                 foregroundColor: Colors.white,
               ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () {
+                if (_currentDelivery == null) return;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PickedUpPage(delivery: _currentDelivery!),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Open Picked Up Page'),
             ),
           ],
         );
@@ -227,7 +248,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
           children: [
             ElevatedButton.icon(
               onPressed:
-                  _isUpdating ? null : () => _updateDeliveryStatus('delivered'),
+              _isUpdating ? null : () => _updateDeliveryStatus('delivered'),
               icon: const Icon(Icons.check_circle),
               label: const Text('Mark as Delivered'),
               style: ElevatedButton.styleFrom(
@@ -239,29 +260,7 @@ class _DeliveryDetailScreenState extends State<DeliveryDetailScreen> {
         );
 
       case 'delivered':
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.green.shade50,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.green.shade200),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.green.shade600),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Delivery Completed',
-                  style: TextStyle(
-                    color: Colors.green.shade600,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
+        return const SizedBox.shrink();
 
       default:
         return const SizedBox.shrink();
