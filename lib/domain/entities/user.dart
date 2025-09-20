@@ -11,6 +11,7 @@ class User {
   final String? profilePath;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  final int avatarVersion;
 
   const User({
     required this.userId,
@@ -25,6 +26,7 @@ class User {
     this.profilePath,
     required this.createdAt,
     this.updatedAt,
+    this.avatarVersion = 0,
   });
 
   User copyWith({
@@ -40,6 +42,7 @@ class User {
     String? profilePath,
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? avatarVersion,
   }) {
     return User(
       userId: userId ?? this.userId,
@@ -54,6 +57,7 @@ class User {
       profilePath: profilePath ?? this.profilePath,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      avatarVersion: avatarVersion ?? this.avatarVersion,
     );
   }
 

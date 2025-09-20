@@ -37,6 +37,9 @@ abstract class UserRepository {
       String? firstName,
       String? lastName});
 
+  Future<User> updateProfileImage(
+      String userId, String profilePath, int avatarVersion);
+
   Future<User> changePassword(
       String userId, String oldPassword, String newPassword);
 

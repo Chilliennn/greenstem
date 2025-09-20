@@ -136,12 +136,11 @@ class UserService {
   Future<bool> hasNetworkConnection() => _repository.hasNetworkConnection();
 
   // Profile image operations
-  Future<User> updateProfileImage(String userId, String imagePath) async {
+  Future<User> updateProfileImage(
+      String userId, String imagePath, int avatarVersion) async {
     try {
-      return await _repository.updateProfile(
-        userId,
-        profilePath: imagePath,
-      );
+      return await _repository.updateProfileImage(
+          userId, imagePath, avatarVersion);
     } catch (e) {
       throw Exception('Failed to update profile image: $e');
     }

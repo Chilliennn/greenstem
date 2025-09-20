@@ -17,6 +17,7 @@ class UserModel {
   final bool needsSync;
   final bool isCurrentUser;
   final int version; // Add version for LWW
+  final int avatarVersion;
 
   const UserModel({
     required this.userId,
@@ -35,6 +36,7 @@ class UserModel {
     this.needsSync = true,
     this.isCurrentUser = false,
     this.version = 1,
+    this.avatarVersion = 0,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -57,6 +59,7 @@ class UserModel {
       needsSync: (json['needs_sync'] as int?) == 1,
       isCurrentUser: (json['is_current_user'] as int?) == 1,
       version: (json['version'] as int?) ?? 1,
+      avatarVersion: (json['avatar_version'] as int?) ?? 0,
     );
   }
 
@@ -81,6 +84,7 @@ class UserModel {
       needsSync: false,
       isCurrentUser: false,
       version: (json['version'] as int?) ?? 1,
+      avatarVersion: (json['avatar_version'] as int?) ?? 0,
     );
   }
 
@@ -102,6 +106,7 @@ class UserModel {
       'needs_sync': needsSync ? 1 : 0,
       'is_current_user': isCurrentUser ? 1 : 0,
       'version': version,
+      'avatar_version': avatarVersion,
     };
   }
 
@@ -131,6 +136,7 @@ class UserModel {
     bool? needsSync,
     bool? isCurrentUser,
     int? version,
+    int? avatarVersion,
   }) {
     return UserModel(
       userId: userId ?? this.userId,
@@ -149,13 +155,15 @@ class UserModel {
       needsSync: needsSync ?? this.needsSync,
       isCurrentUser: isCurrentUser ?? this.isCurrentUser,
       version: version ?? this.version,
+      avatarVersion: avatarVersion ?? this.avatarVersion,
     );
   }
 
   // Last-Write Wins conflict resolution
   bool isNewerThan(UserModel other) {
     return updatedAt.isAfter(other.updatedAt) ||
-        (updatedAt.isAtSameMomentAs(other.updatedAt) && version > other.version);
+        (updatedAt.isAtSameMomentAs(other.updatedAt) &&
+            version > other.version);
   }
 
   User toEntity() {
@@ -172,6 +180,7 @@ class UserModel {
       profilePath: profilePath,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      avatarVersion: avatarVersion,
     );
   }
 
@@ -199,6 +208,7 @@ class UserModel {
       needsSync: needsSync ?? true,
       isCurrentUser: isCurrentUser ?? false,
       version: version ?? 1,
+      avatarVersion: entity.avatarVersion,
     );
   }
 

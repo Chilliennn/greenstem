@@ -220,85 +220,81 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       );
     }
+    final userStream = ref.watch(userServiceProvider).watchCurrentUser();
+    return StreamBuilder<User?>(
+        stream: userStream,
+        builder: (context, userSnapshot) {
+          print(
+              'home screen: connectionstate=${userSnapshot.connectionState}, hasdata=${userSnapshot.hasData}, haserror=${userSnapshot.hasError}');
 
-    return FutureBuilder<User?>(
-      future: _getCurrentUser(), // get user once, not stream
-      builder: (context, userSnapshot) {
-        print(
-            'futurebuilder: connectionstate=${userSnapshot.connectionState}, hasdata=${userSnapshot.hasData}, haserror=${userSnapshot.hasError}');
-
-        if (userSnapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            backgroundColor: Color(0xFF111111),
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text(
-                    'Loading user data...',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ],
+          if (userSnapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              backgroundColor: Color(0xFF111111),
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text(
+                      'Loading user data...',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
-        }
-
-        if (userSnapshot.hasError) {
-          print('home screen user error: ${userSnapshot.error}');
-          return Scaffold(
-            backgroundColor: const Color(0xFF111111),
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error, size: 64, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Error loading user: ${userSnapshot.error}',
-                    style: const TextStyle(color: Colors.white),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      _checkConnectivity();
-                      if (_isOnline) _syncAllData();
-                    },
-                    child: const Text('Retry'),
-                  ),
-                ],
+            );
+          }
+          if (userSnapshot.hasError) {
+            print('home screen user error: ${userSnapshot.error}');
+            return Scaffold(
+              backgroundColor: const Color(0xFF111111),
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error, size: 64, color: Colors.red),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Error loading user: ${userSnapshot.error}',
+                      style: const TextStyle(color: Colors.white),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        _checkConnectivity();
+                        if (_isOnline) _syncAllData();
+                      },
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
-        }
-
-        final currentUser = userSnapshot.data;
-        if (currentUser == null) {
-          return const Scaffold(
-            backgroundColor: Color(0xFF111111),
-            body: Center(
-              child: Text(
-                'No user logged in',
-                style: TextStyle(color: Colors.white),
+            );
+          }
+          final currentUser = userSnapshot.data;
+          if (currentUser == null) {
+            return const Scaffold(
+              backgroundColor: Color(0xFF111111),
+              body: Center(
+                child: Text(
+                  'No user logged in',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
-            ),
+            );
+          }
+          print('home screen: current user loaded: ${currentUser.userId}');
+
+          return _HomeContent(
+            currentUser: currentUser,
+            deliveryService: _deliveryService,
+            isOnline: _isOnline,
+            onSyncData: _syncAllData,
+            onCheckConnectivity: _checkConnectivity,
+            getProfileImage: _getProfileImage, // Pass the method
           );
-        }
-
-        print('home screen: current user loaded: ${currentUser.userId}');
-
-        // main ui structure - this won't rebuild when user changes
-        return _HomeContent(
-          currentUser: currentUser,
-          deliveryService: _deliveryService,
-          isOnline: _isOnline,
-          onSyncData: _syncAllData,
-          onCheckConnectivity: _checkConnectivity,
-          getProfileImage: _getProfileImage, // Pass the method
-        );
       },
     );
   }
@@ -361,7 +357,8 @@ class _HomeContentState extends State<_HomeContent> {
               child: CircleAvatar(
                 radius: 20,
                 backgroundColor: Colors.grey[300],
-                backgroundImage: widget.getProfileImage(widget.currentUser), // Use the profile image
+                backgroundImage: widget.getProfileImage(
+                    widget.currentUser), // Use the profile image
                 child: widget.getProfileImage(widget.currentUser) == null
                     ? (widget.currentUser.username?.isNotEmpty == true
                         ? Text(

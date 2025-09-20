@@ -6,8 +6,8 @@ import 'dart:io' show Platform;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
+import 'core/services/background_task_service.dart';
 import 'presentation/screens/splash/splash_screen.dart';
-import 'data/datasources/local/database_manager.dart'; // Add this import
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,7 +40,10 @@ Future<void> main() async {
   } catch (e) {
     print('Error initializing Supabase: $e');
   }
-  
+
+  // Initialize background tasks
+  BackgroundTaskService.initialize();
+
   runApp(const ProviderScope(child: MyApp()));
 }
 

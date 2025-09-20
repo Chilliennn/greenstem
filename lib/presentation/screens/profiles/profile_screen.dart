@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/services/image_upload_service.dart';
+import '../../../domain/services/image_upload_service.dart';
 import '../../../domain/entities/user.dart';
 import '../../providers/auth_provider.dart';
 import '../auth/sign_in_screen.dart';
@@ -462,23 +462,49 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       final user = ref.read(authProvider).user;
       if (user == null) return;
 
+      // Show loading dialog with upload states
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(AppColors.cyellow),
-          ),
+        builder: (context) => StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(AppColors.cyellow),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Uploading image...',
+                    style: TextStyle(
+                      color: AppColors.cblack,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       );
 
-      final String localPath = await ImageUploadService.saveImageLocally(
-        imageFile,
-        user.userId,
+      // Use new dual save method (local + remote)
+      final String remoteUrl = await ImageUploadService.updateProfileImage(
+        imageFile: imageFile,
+        userId: user.userId,
+        currentAvatarVersion: user.avatarVersion,
       );
 
+      // Update user profile with new image URL and incremented version
       final userService = ref.read(userServiceProvider);
-      await userService.updateProfileImage(user.userId, localPath);
+      await userService.updateProfileImage(
+        user.userId,
+        remoteUrl,
+        user.avatarVersion + 1,
+      );
 
       if (mounted) {
         Navigator.pop(context);
@@ -566,10 +592,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   ImageProvider? _getProfileImage(User user) {
+    // Use the new ImageUploadService to get the best available image
+    // This will handle local cache, remote download, and default fallback
     if (user.profilePath == null || user.profilePath!.isEmpty) {
       return null;
     }
 
+    // For local files, check if they exist
     if (user.profilePath!.startsWith('/')) {
       final File imageFile = File(user.profilePath!);
       if (imageFile.existsSync()) {
@@ -577,6 +606,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       }
     }
 
+    // For remote URLs, use NetworkImage
     if (user.profilePath!.startsWith('http')) {
       return NetworkImage(user.profilePath!);
     }
