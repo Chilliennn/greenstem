@@ -80,9 +80,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true, errorMessage: null);
 
     try {
-      final user = await _signUpUseCase.call(params);
+      await _signUpUseCase.call(params);
 
-      state = state.copyWith(isLoading: false, user: user, errorMessage: null);
+      state = state.copyWith(isLoading: false, user: null, errorMessage: null);
     } catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: e.toString());
     }
@@ -113,11 +113,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         // Update last login time
         await _authStorage!.updateLastLoginTime();
       }
-    
+
       // Login successful
-      state =
-          state.copyWith(isLoading: false, user: user, errorMessage: null);
-        } catch (e) {
+      state = state.copyWith(isLoading: false, user: user, errorMessage: null);
+    } catch (e) {
       // Login error - clear any existing user and saved credentials if this was auto-login
       if (isAutoLogin && _authStorage != null) {
         await _authStorage!.clearAuthData();

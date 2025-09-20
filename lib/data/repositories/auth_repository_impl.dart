@@ -38,11 +38,11 @@ class AuthRepositoryImpl implements AuthRepository {
       userId: '',
       firstName: params.firstName,
       lastName: params.lastName,
-      username: params.username,
-      email: params.email,
+      username: params.username.trim(),
+      email: params.email.trim(),
       password: params.password,
       birthDate: birthDate,
-      phoneNo: params.phoneNo,
+      phoneNo: params.phoneNo.trim(),
       createdAt: DateTime.now(),
     );
 
@@ -51,7 +51,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<User> signIn(SignInParams params) async {
-    final user = await _userRepository.login(params.username, params.password);
+    final user = await _userRepository.login(params.username.trim(), params.password);
     if (user == null) {
       throw Exception('Login failed');
     }

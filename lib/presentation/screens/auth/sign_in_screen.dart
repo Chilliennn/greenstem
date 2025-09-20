@@ -117,6 +117,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         });
 
         return Scaffold(
+          resizeToAvoidBottomInset: false,
           body: Stack(
             children: [
               // Fixed background image
