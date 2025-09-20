@@ -6,7 +6,7 @@ import '../../../core/utils/distance_calculator.dart';
 import '../../../presentation/widgets/delivery_detail/picked_up.dart';
 import '../../../presentation/screens/delivery_detail/delivery_detail_screen.dart';
 import '../../../presentation/widgets/delivery_detail/awaiting.dart';
-import '../../../presentation/widgets/delivery_detail/en_route.dart'; 
+import '../../../presentation/widgets/delivery_detail/en_route.dart';
 
 
 _setUseApi() => false;
@@ -16,16 +16,10 @@ class ItemCard extends StatefulWidget {
   final String state;
   final Delivery? delivery;
   final DeliveryService? deliveryService;
-  final Function(Delivery)? onDeliveryUpdated; // Added optional callback for navigation
 
 
-  const ItemCard({
-    super.key,
-    required this.state,
-    this.delivery,
-    this.deliveryService,
-    this.onDeliveryUpdated,
-  });
+  const ItemCard(
+      {super.key, required this.state, this.delivery, this.deliveryService});
 
 
   @override
@@ -42,9 +36,7 @@ class _ItemCardState extends State<ItemCard> {
     switch (state) {
       case "incoming":
         return _IncomingCard(
-          delivery: widget.delivery,
-          deliveryService: widget.deliveryService,
-        );
+            delivery: widget.delivery, deliveryService: widget.deliveryService);
 
 
       case "awaiting":
@@ -53,7 +45,6 @@ class _ItemCardState extends State<ItemCard> {
           color: Color(0xFFFEA41D),
           delivery: widget.delivery,
           deliveryService: widget.deliveryService,
-          onDeliveryUpdated: widget.onDeliveryUpdated,
         );
 
 
@@ -63,7 +54,6 @@ class _ItemCardState extends State<ItemCard> {
           color: Color(0xFF4B97FA),
           delivery: widget.delivery,
           deliveryService: widget.deliveryService,
-          onDeliveryUpdated: widget.onDeliveryUpdated,
         );
 
 
@@ -73,7 +63,6 @@ class _ItemCardState extends State<ItemCard> {
           color: Color(0xFFC084FC),
           delivery: widget.delivery,
           deliveryService: widget.deliveryService,
-          onDeliveryUpdated: widget.onDeliveryUpdated,
         );
 
 
@@ -83,7 +72,6 @@ class _ItemCardState extends State<ItemCard> {
           color: Color(0xFFC084FC),
           delivery: widget.delivery,
           deliveryService: widget.deliveryService,
-          onDeliveryUpdated: widget.onDeliveryUpdated,
         );
 
 
@@ -93,7 +81,6 @@ class _ItemCardState extends State<ItemCard> {
           color: Colors.grey,
           delivery: widget.delivery,
           deliveryService: widget.deliveryService,
-          onDeliveryUpdated: widget.onDeliveryUpdated,
         );
     }
   }
@@ -588,84 +575,88 @@ class _StatusCard extends StatelessWidget {
                                   }
 
 
-                                  final itemCount = snapshot.data ?? 0;
+                                final itemCount = snapshot.data ?? 0;
+                                return Text(
+                                  "$itemCount items",
+                                  style: TextStyle(
+                                      color: Colors.grey, fontSize: 12),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                        SizedBox(
+                          height: 6,
+                        ),
+                        Row(
+                          spacing: 8,
+                          children: [
+                            Icon(
+                              Icons.location_on_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            FutureBuilder<String>(
+                              future: _calculateDistance(),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
                                   return Text(
-                                    "$itemCount items",
+                                    "calculating...",
                                     style: TextStyle(
                                         color: Colors.grey, fontSize: 12),
                                   );
-                                },
-                              ),
-                            ],
-                          ),
-                          SizedBox(
-                            height: 6,
-                          ),
-                          Row(
-                            spacing: 8,
-                            children: [
-                              Icon(
-                                Icons.location_on_rounded,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                              FutureBuilder<String>(
-                                future: _calculateDistance(),
-                                builder: (context, snapshot) {
-                                  if (snapshot.connectionState ==
-                                      ConnectionState.waiting) {
-                                    return Text(
-                                      "calculating...",
-                                      style: TextStyle(
-                                          color: Colors.grey, fontSize: 12),
-                                    );
-                                  }
+                                }
 
 
-                                  return Text(
-                                    snapshot.data ?? 'n/a',
-                                    style: TextStyle(
-                                        color: Colors.grey, fontSize: 12),
-                                  );
-                                },
-                              ),
-                            ],
-                          )
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        spacing: 4,
-                        children: [
-                          label == 'Delivered'
-                              ? Align(
-                            alignment: Alignment.topRight,
-                            child: Text(
-                              'Delivered at',
-                              style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600),
+                                return Text(
+                                  snapshot.data ?? 'n/a',
+                                  style: TextStyle(
+                                      color: Colors.grey, fontSize: 12),
+                                );
+                              },
                             ),
-                          )
-                              : Container(),
-                          Align(
-                            alignment: Alignment.bottomRight,
-                            child: Text(
-                              '${label == 'Delivered' ? '' : 'Due '}${DateFormat("dd MMM yyyy - hh:mm a").format(delivery!.dueDatetime!)}',
-                              style: TextStyle(color: Colors.grey, fontSize: 12),
-                            ),
+                          ],
+                        )
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      spacing: 4,
+                      children: [
+                        label == 'Delivered'
+                            ? Align(
+                          alignment: Alignment.topRight,
+                          child: Text(
+                            'Delivered at',
+                            style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600),
                           ),
-                        ],
-                      )
-                    ],
-                  )
-                ],
+                        )
+                            : Container(),
+                        Align(
+                          alignment: Alignment.bottomRight,
+                          child: Text(
+                            '${label == 'Delivered' ? '' : 'Due '}${DateFormat("dd MMM yyyy - hh:mm a").format(delivery!.dueDatetime!)}',
+                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    )
+                  ],
+                )
               ],
-            ),
+            ],
           ),
-        )
+        ),
+      ),
     );
-    }
+  }
 }
+
+
+
+
 
