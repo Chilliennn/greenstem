@@ -31,7 +31,6 @@ import '../../../data/repositories/location_repository_impl.dart';
 import '../../../data/datasources/local/local_location_database_service.dart';
 import '../../../data/datasources/remote/remote_location_datasource.dart';
 
-
 class PickedUpPage extends ConsumerStatefulWidget {
   final Delivery delivery;
 
@@ -55,7 +54,7 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
   late final PartRepositoryImpl _partRepository;
   late final LocationService _locationService;
   late final LocationRepositoryImpl _locationRepository;
-
+  late final _url = "https://www.poslaju.com.my";
 
   bool _isUpdating = false;
   bool _isLoadingParts = true;
@@ -273,6 +272,13 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
     );
   }
 
+  Future<void> launchMyUrl(String url) async{
+    final Uri uri = Uri.parse(url);
+
+    if (!await launchUrl(uri)){
+      throw Exception('Could not launch $uri');
+    }
+  }
 
   ImageProvider? _getProfileImage(User user) {
     if (user.profilePath == null || user.profilePath!.isEmpty) {
@@ -801,35 +807,13 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
             // Contact Button
             OutlinedButton.icon(
               onPressed: () async {
-                const url = 'https://www.poslaju.com.my/';
-                try {
-                  if (await canLaunchUrl(Uri.parse(url))) {
-                    await launchUrl(Uri.parse(url),
-                        mode: LaunchMode.externalApplication);
-                  } else {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Could not open Pos Laju website'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error opening website: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
+                launchMyUrl(_url);
               },
-              icon: const Icon(Icons.language, color: Colors.white),
+
+
+              icon: const Icon(Icons.call, color: Colors.white),
               label: const Text(
-                'Contact Pos Laju',
+                'Contact',
                 style: TextStyle(color: Colors.white, fontSize: 16),
               ),
               style: OutlinedButton.styleFrom(

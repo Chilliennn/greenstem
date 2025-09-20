@@ -990,7 +990,7 @@ packages:
     source: hosted
     version: "6.3.2"
   url_launcher_android:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: url_launcher_android
       sha256: "199bc33e746088546a39cc5f36bac5a278c5e53b40cb3196f99e7345fdcfae6b"
@@ -998,7 +998,7 @@ packages:
     source: hosted
     version: "6.3.22"
   url_launcher_ios:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: url_launcher_ios
       sha256: d80b3f567a617cb923546034cc94bfe44eb15f989fe670b37f26abdb9d939cb7
@@ -1014,7 +1014,7 @@ packages:
     source: hosted
     version: "3.2.1"
   url_launcher_macos:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: url_launcher_macos
       sha256: c043a77d6600ac9c38300567f33ef12b0ef4f4783a2c1f00231d2b1941fea13f
@@ -1038,7 +1038,7 @@ packages:
     source: hosted
     version: "2.4.1"
   url_launcher_windows:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: url_launcher_windows
       sha256: "3284b6d2ac454cf34f114e1d3319866fdd1e19cdc329999057e44ffe936cfa77"
