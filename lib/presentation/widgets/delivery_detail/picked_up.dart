@@ -26,6 +26,10 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/services/network_service.dart';
 import '../../../core/utils/distance_calculator.dart';
 import '../../providers/auth_provider.dart';
+import '../../../domain/services/location_service.dart';
+import '../../../data/repositories/location_repository_impl.dart';
+import '../../../data/datasources/local/local_location_database_service.dart';
+import '../../../data/datasources/remote/remote_location_datasource.dart';
 
 
 class PickedUpPage extends ConsumerStatefulWidget {
@@ -49,6 +53,8 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
   late final UserRepositoryImpl _userRepository;
   late final DeliveryPartRepositoryImpl _deliveryPartRepository;
   late final PartRepositoryImpl _partRepository;
+  late final LocationService _locationService;
+  late final LocationRepositoryImpl _locationRepository;
 
 
   bool _isUpdating = false;
@@ -102,6 +108,13 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
     _partRepository =
         PartRepositoryImpl(localPartDataSource, remotePartDataSource);
     _partService = PartService(_partRepository);
+
+
+    final localLocationDataSource = LocalLocationDatabaseService();
+    final remoteLocationDataSource = SupabaseLocationDataSource();
+    _locationRepository = LocationRepositoryImpl(
+        localLocationDataSource, remoteLocationDataSource);
+    _locationService = LocationService(_locationRepository);
   }
 
 
@@ -254,42 +267,10 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
 
 
   Future<String> _calculateDistanceAndTime() async {
-    if (_currentDelivery?.pickupLocation == null ||
-        _currentDelivery?.deliveryLocation == null) {
-      return 'n/a • n/a';
-    }
-
-
-    try {
-      final coordinates = await _deliveryService.getDeliveryCoordinates(
-        _currentDelivery!.pickupLocation!,
-        _currentDelivery!.deliveryLocation!,
-      );
-
-
-      final double? distance = await DistanceCalculator.calculateDistance(
-        coordinates['pickupLat'],
-        coordinates['pickupLon'],
-        coordinates['deliveryLat'],
-        coordinates['deliveryLon'],
-        useApi: false,
-      );
-
-
-      if (distance == null) return 'n/a • n/a'; // Null check
-
-
-      final formattedDistance = DistanceCalculator.formatDistance(distance);
-      final estimatedTimeMinutes = (distance * timePerKmMinutes).round();
-      final formattedTime = estimatedTimeMinutes < 60
-          ? '$estimatedTimeMinutes min'
-          : '${(estimatedTimeMinutes / 60).round()} hr';
-
-
-      return '$formattedDistance • $formattedTime';
-    } catch (e) {
-      return 'n/a • n/a';
-    }
+    return await _locationService.calculateDistanceAndTime(
+      _currentDelivery?.pickupLocation,
+      _currentDelivery?.deliveryLocation,
+    );
   }
 
 
@@ -413,15 +394,11 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                             ),
                             const SizedBox(height: 6),
                             FutureBuilder<String>(
-                              future: _deliveryService.getLocationName(
-                                  delivery.pickupLocation) ??
-                                  Future.value(
-                                      delivery.pickupLocation ?? 'Unknown'),
+                              future: _locationService
+                                  .getLocationName(delivery.pickupLocation),
                               builder: (context, snapshot) {
                                 return Text(
-                                  snapshot.data ??
-                                      delivery.pickupLocation ??
-                                      'Unknown',
+                                  snapshot.data ?? 'Unknown',
                                   style: const TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold,
@@ -432,15 +409,15 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                             ),
                             const SizedBox(height: 4),
                             FutureBuilder<String>(
-                              future: _deliveryService.getLocationAddress(
-                                  delivery.pickupLocation) ??
-                                  Future.value('Storage B'), // Assumed method
+                              future: _locationService
+                                  .getLocationAddress(delivery.pickupLocation),
                               builder: (context, snapshot) {
                                 return Text(
                                   snapshot.data ?? 'No address available',
                                   style: TextStyle(
-                                      color: Colors.grey.shade400,
-                                      fontSize: 14),
+                                    color: Colors.grey.shade400,
+                                    fontSize: 14,
+                                  ),
                                 );
                               },
                             ),
@@ -461,15 +438,11 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                             ),
                             const SizedBox(height: 6),
                             FutureBuilder<String>(
-                              future: _deliveryService.getLocationName(
-                                  delivery.deliveryLocation) ??
-                                  Future.value(
-                                      delivery.deliveryLocation ?? 'Unknown'),
+                              future: _locationService
+                                  .getLocationName(delivery.deliveryLocation),
                               builder: (context, snapshot) {
                                 return Text(
-                                  snapshot.data ??
-                                      delivery.deliveryLocation ??
-                                      'Unknown',
+                                  snapshot.data ?? 'Unknown',
                                   textAlign: TextAlign.right,
                                   style: const TextStyle(
                                     fontSize: 20,
@@ -481,16 +454,16 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                             ),
                             const SizedBox(height: 4),
                             FutureBuilder<String>(
-                              future: _deliveryService.getLocationAddress(
-                                  delivery.deliveryLocation) ??
-                                  Future.value('Service Bay'), // Assumed method
+                              future: _locationService.getLocationAddress(
+                                  delivery.deliveryLocation),
                               builder: (context, snapshot) {
                                 return Text(
                                   snapshot.data ?? 'No address available',
                                   textAlign: TextAlign.right,
                                   style: TextStyle(
-                                      color: Colors.grey.shade400,
-                                      fontSize: 14),
+                                    color: Colors.grey.shade400,
+                                    fontSize: 14,
+                                  ),
                                 );
                               },
                             ),
@@ -828,21 +801,35 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
             // Contact Button
             OutlinedButton.icon(
               onPressed: () async {
-                final url = 'https://wa.me/60163399999';
-                if (await canLaunch(url)) {
-                  await launch(url);
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Could not open WhatsApp'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
+                const url = 'https://www.poslaju.com.my/';
+                try {
+                  if (await canLaunchUrl(Uri.parse(url))) {
+                    await launchUrl(Uri.parse(url),
+                        mode: LaunchMode.externalApplication);
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Could not open Pos Laju website'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error opening website: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
                 }
               },
-              icon: const Icon(Icons.call, color: Colors.white),
+              icon: const Icon(Icons.language, color: Colors.white),
               label: const Text(
-                'Contact',
+                'Contact Pos Laju',
                 style: TextStyle(color: Colors.white, fontSize: 16),
               ),
               style: OutlinedButton.styleFrom(
@@ -904,11 +891,10 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
     _userRepository.dispose();
     _deliveryPartRepository.dispose();
     _partRepository.dispose();
+    _locationRepository.dispose();
     super.dispose();
   }
 }
-
-
 
 
 
