@@ -3,6 +3,10 @@ import 'package:greenstem/domain/entities/delivery.dart';
 import 'package:intl/intl.dart';
 import '../../../domain/services/delivery_service.dart';
 import '../../../core/utils/distance_calculator.dart';
+import '../../../presentation/widgets/delivery_detail/picked_up.dart';
+import '../../../presentation/screens/delivery_detail/delivery_detail_screen.dart';
+import '../../../presentation/widgets/delivery_detail/awaiting.dart';
+import '../../../presentation/widgets/delivery_detail/en_route.dart';
 
 
 _setUseApi() => false;
@@ -370,6 +374,7 @@ class _StatusCard extends StatelessWidget {
   final Color color;
   final Delivery? delivery;
   final DeliveryService? deliveryService;
+  final Function(Delivery)? onDeliveryUpdated;
 
 
   const _StatusCard({
@@ -377,6 +382,7 @@ class _StatusCard extends StatelessWidget {
     required this.color,
     this.delivery,
     this.deliveryService,
+    this.onDeliveryUpdated,
   });
 
 
@@ -415,118 +421,158 @@ class _StatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      child: Card(
-        color: Color(0xFF1D1D1D),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Icon(
-                    Icons.inbox_rounded,
-                    color: label == 'Awaiting'
-                        ? Color(0xFFFEA41D)
-                        : label == 'Picked up'
-                        ? Color(0xFF4B97FA)
-                        : label == 'En Route'
-                        ? Color(0xFFC084FC)
-                        : Color(0xFF00B65E),
-                    size: 32,
+        onTap: () {
+          if (delivery != null) {
+            if (label == "Awaiting") {
+              // Add navigation to AwaitingPage
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => AwaitingPage(delivery: delivery!),
+                ),
+              );
+            } else if (label == "Picked up") {
+              // Direct navigation to PickedUpPage for picked up deliveries
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PickedUpPage(delivery: delivery!),
+                ),
+              );
+            } else if (label == "En Route") {
+              // Add navigation to EnRoutePage
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EnRoutePage(delivery: delivery!),
+                ),
+              );
+            } else {
+              // Navigate to DeliveryDetailScreen for other statuses
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => DeliveryDetailScreen(
+                    delivery: delivery!,
+                    onDeliveryUpdated: onDeliveryUpdated ?? (_) {},
                   ),
-                  Text(
-                    label,
-                    style: TextStyle(
-                        color: label == 'Awaiting'
-                            ? Color(0xFFFEA41D)
-                            : label == 'Picked up'
-                            ? Color(0xFF4B97FA)
-                            : label == 'En Route'
-                            ? Color(0xFFC084FC)
-                            : Color(0xFF00B65E),
-                        fontWeight: FontWeight.w800),
-                  )
-                ],
-              ),
-              if (delivery != null) ...[
-                SizedBox(height: 8),
-                Text(
-                  label == 'Awaiting'
-                      ? 'Pick up from'
-                      : label == 'Picked up'
-                      ? 'Deliver to'
-                      : label == 'En Route'
-                      ? 'Delivering to'
-                      : 'Delivered to',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
                 ),
-                SizedBox(
-                  height: 4,
-                ),
+              );
+            }
+          }
+        },
+        child: Card(
+          color: Color(0xFF1D1D1D),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    FutureBuilder<String>(
-                      future: deliveryService?.getLocationName(
-                        label == 'Awaiting'
-                            ? delivery?.pickupLocation
-                            : delivery?.deliveryLocation,
-                      ) ??
-                          Future.value(
-                            label == 'Awaiting'
-                                ? delivery?.pickupLocation ?? 'Unknown'
-                                : delivery?.deliveryLocation ?? 'Unknown',
-                          ),
-                      builder: (context, snapshot) {
-                        return Text(
-                          snapshot.data ??
-                              (label == 'Awaiting'
-                                  ? delivery?.pickupLocation ?? 'Unknown'
-                                  : delivery?.deliveryLocation ?? 'Unknown'),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        );
-                      },
+                    Icon(
+                      Icons.inbox_rounded,
+                      color: label == 'Awaiting'
+                          ? Color(0xFFFEA41D)
+                          : label == 'Picked up'
+                          ? Color(0xFF4B97FA)
+                          : label == 'En Route'
+                          ? Color(0xFFC084FC)
+                          : Color(0xFF00B65E),
+                      size: 32,
                     ),
+                    Text(
+                      label,
+                      style: TextStyle(
+                          color: label == 'Awaiting'
+                              ? Color(0xFFFEA41D)
+                              : label == 'Picked up'
+                              ? Color(0xFF4B97FA)
+                              : label == 'En Route'
+                              ? Color(0xFFC084FC)
+                              : Color(0xFF00B65E),
+                          fontWeight: FontWeight.w800),
+                    )
                   ],
                 ),
-                SizedBox(
-                  height: 20,
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          spacing: 8,
-                          children: [
-                            Icon(
-                              Icons.shopping_bag_outlined,
-                              color: Colors.white,
-                              size: 18,
+                if (delivery != null) ...[
+                  SizedBox(height: 8),
+                  Text(
+                    label == 'Awaiting'
+                        ? 'Pick up from'
+                        : label == 'Picked up'
+                        ? 'Deliver to'
+                        : label == 'En Route'
+                        ? 'Delivering to'
+                        : 'Delivered to',
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  SizedBox(
+                    height: 4,
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      FutureBuilder<String>(
+                        future: deliveryService?.getLocationName(
+                          label == 'Awaiting'
+                              ? delivery?.pickupLocation
+                              : delivery?.deliveryLocation,
+                        ) ??
+                            Future.value(
+                              label == 'Awaiting'
+                                  ? delivery?.pickupLocation ?? 'Unknown'
+                                  : delivery?.deliveryLocation ?? 'Unknown',
                             ),
-                            StreamBuilder<int?>(
-                              stream: deliveryService
-                                  ?.getNumberOfDeliveryPartsByDeliveryId(
-                                  delivery!.deliveryId),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return Text(
-                                    "loading items",
-                                    style: TextStyle(
-                                        color: Colors.grey, fontSize: 12),
-                                  );
-                                }
+                        builder: (context, snapshot) {
+                          return Text(
+                            snapshot.data ??
+                                (label == 'Awaiting'
+                                    ? delivery?.pickupLocation ?? 'Unknown'
+                                    : delivery?.deliveryLocation ?? 'Unknown'),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  SizedBox(
+                    height: 20,
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            spacing: 8,
+                            children: [
+                              Icon(
+                                Icons.shopping_bag_outlined,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                              StreamBuilder<int?>(
+                                stream: deliveryService
+                                    ?.getNumberOfDeliveryPartsByDeliveryId(
+                                    delivery!.deliveryId),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.waiting) {
+                                    return Text(
+                                      "loading items",
+                                      style: TextStyle(
+                                          color: Colors.grey, fontSize: 12),
+                                    );
+                                  }
 
 
                                 final itemCount = snapshot.data ?? 0;
