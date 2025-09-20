@@ -500,6 +500,53 @@ class UserRepositoryImpl implements UserRepository {
   }
 
   @override
+  Future<User> updateProfileImage(
+      String userId, String profilePath, int avatarVersion) async {
+    try {
+      print('🖼️ Updating profile image for user $userId');
+
+      // Get current user
+      final currentUser = await _localDataSource.getUserById(userId);
+      if (currentUser == null) {
+        throw Exception('User not found: $userId');
+      }
+
+      // Create updated user with new profile path and avatar version
+      final updatedUser = currentUser.copyWith(
+        profilePath: profilePath,
+        avatarVersion: avatarVersion,
+        updatedAt: DateTime.now(),
+        version: currentUser.version + 1,
+        isSynced: false,
+        needsSync: true,
+      );
+
+      // Update locally first (offline-first)
+      final savedModel = await _localDataSource.updateUser(updatedUser);
+      print('✅ Profile image updated locally');
+
+      // Try to sync to remote if online
+      if (await hasNetworkConnection()) {
+        try {
+          await _remoteDataSource.updateUser(savedModel);
+          await _localDataSource.markAsSynced(userId);
+          print('✅ Profile image synced to remote');
+        } catch (e) {
+          print('⚠️ Failed to sync profile image to remote: $e');
+          // Continue with local update even if remote sync fails
+        }
+      } else {
+        print('📱 Offline: Profile image will sync when online');
+      }
+
+      return savedModel.toEntity().toPublicUser();
+    } catch (e) {
+      print('❌ Failed to update profile image: $e');
+      throw Exception('Failed to update profile image: $e');
+    }
+  }
+
+  @override
   Future<void> resetPassword(String email, String newPassword) async {
     try {
       if (await hasNetworkConnection()) {

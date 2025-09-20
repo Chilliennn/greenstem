@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-import 'supabase_storage_service.dart';
+import '../../data/datasources/remote/supabase_storage_datasource.dart';
 import 'image_cache_service.dart';
 
 enum AvatarUploadState {
@@ -16,8 +16,8 @@ enum AvatarUploadState {
 
 class ImageUploadService {
   static final ImagePicker _picker = ImagePicker();
-  static final SupabaseStorageService _storageService =
-      SupabaseStorageService();
+  static final SupabaseStorageDatasource _storageService =
+      SupabaseStorageDatasource();
   static final ImageCacheService _cacheService = ImageCacheService();
 
   /// Pick image from gallery or camera

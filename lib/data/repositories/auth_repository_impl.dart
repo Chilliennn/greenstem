@@ -6,16 +6,12 @@ import '../../domain/params/sign_up_params.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../domain/repositories/user_repository.dart';
 
-extension _ListExtension<T> on List<T> {
-  T? get firstOrNull => isEmpty ? null : first;
-}
-
 class AuthRepositoryImpl implements AuthRepository {
   final UserRepository _userRepository;
 
   AuthRepositoryImpl(this._userRepository);
   UserRepository get userRepository => _userRepository;
-  
+
   @override
   Future<User> signUp(SignUpParams params) async {
     // Parse birth date from dd/MM/yyyy format
@@ -51,7 +47,8 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<User> signIn(SignInParams params) async {
-    final user = await _userRepository.login(params.username.trim(), params.password);
+    final user =
+        await _userRepository.login(params.username.trim(), params.password);
     if (user == null) {
       throw Exception('Login failed');
     }
