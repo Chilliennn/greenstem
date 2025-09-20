@@ -459,7 +459,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _handleImageSelection(File imageFile) async {
     try {
-
       final user = ref.read(authProvider).user;
       if (user == null) return;
 
