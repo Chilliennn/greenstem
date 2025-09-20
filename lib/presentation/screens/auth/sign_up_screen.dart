@@ -258,10 +258,6 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   }
 
   void _navigateToLogin() {
-    print('🔄 Attempting to navigate to SignInScreen...');
-    print('📱 Widget mounted: $mounted');
-    print('🎯 Context: $context');
-
     try {
       Navigator.pushAndRemoveUntil(
         context,
