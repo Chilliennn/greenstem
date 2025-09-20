@@ -93,7 +93,7 @@ class UserService {
   Future<User> changePassword(
       String userId, String oldPassword, String newPassword) async {
     try {
-      if (newPassword.length < 6) {
+      if (newPassword.length < 8) {
         throw Exception('New password must be at least 6 characters');
       }
       return await _repository.changePassword(userId, oldPassword, newPassword);

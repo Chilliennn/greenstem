@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
@@ -30,10 +31,69 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   bool _isLoading = false;
   String? _selectedGender;
 
+  // Validation states
+  bool _isEmailValidating = false;
+  bool _isUsernameValidating = false;
+  String? _emailError;
+  String? _usernameError;
+
+  // Focus nodes for validation
+  final _emailFocusNode = FocusNode();
+  final _usernameFocusNode = FocusNode();
+
+  // Country code selection
+  String _selectedCountryCode = '+60';
+
+  final List<Map<String, dynamic>> _countryCodes = [
+    {
+      'code': '+60',
+      'flag': '🇲🇾',
+      'country': 'Malaysia',
+      'minLength': 9,
+      'maxLength': 10
+    },
+    {
+      'code': '+65',
+      'flag': '🇸🇬',
+      'country': 'Singapore',
+      'minLength': 8,
+      'maxLength': 8
+    },
+    {
+      'code': '+62',
+      'flag': '🇮🇩',
+      'country': 'Indonesia',
+      'minLength': 9,
+      'maxLength': 12
+    },
+    {
+      'code': '+86',
+      'flag': '🇨🇳',
+      'country': 'China',
+      'minLength': 11,
+      'maxLength': 11
+    },
+    {
+      'code': '+91',
+      'flag': '🇮🇳',
+      'country': 'India',
+      'minLength': 10,
+      'maxLength': 10
+    },
+    {
+      'code': '+1',
+      'flag': '🇺🇸',
+      'country': 'United States',
+      'minLength': 10,
+      'maxLength': 10
+    },
+  ];
+
   @override
   void initState() {
     super.initState();
     _initializeFields();
+    _initializeFocusListeners();
   }
 
   void _initializeFields() {
@@ -41,11 +101,170 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _lastNameController.text = widget.user.lastName ?? '';
     _usernameController.text = widget.user.username ?? '';
     _emailController.text = widget.user.email ?? '';
-    _phoneNoController.text = widget.user.phoneNo ?? '';
+
+    // Parse phone number to extract country code and number
+    final phoneNo = widget.user.phoneNo ?? '';
+    if (phoneNo.isNotEmpty) {
+      // Try to find matching country code
+      for (final country in _countryCodes) {
+        final code = country['code'] as String;
+        if (phoneNo.startsWith(code)) {
+          _selectedCountryCode = code;
+          _phoneNoController.text = phoneNo.substring(code.length);
+          break;
+        }
+      }
+      // If no country code found, use the full number
+      if (_phoneNoController.text.isEmpty) {
+        _phoneNoController.text = phoneNo;
+      }
+    }
+
     _birthDateController.text = widget.user.birthDate != null
         ? DateFormat('dd/MM/yyyy').format(widget.user.birthDate!)
         : '';
     _selectedGender = widget.user.gender;
+  }
+
+  void _initializeFocusListeners() {
+    // Email focus listener
+    _emailFocusNode.addListener(() {
+      if (!_emailFocusNode.hasFocus && _emailController.text.isNotEmpty) {
+        _validateEmail(_emailController.text);
+      }
+    });
+
+    // Username focus listener
+    _usernameFocusNode.addListener(() {
+      if (!_usernameFocusNode.hasFocus && _usernameController.text.isNotEmpty) {
+        _validateUsername(_usernameController.text);
+      }
+    });
+  }
+
+  Future<bool> _checkEmailAvailability(String email) async {
+    try {
+      final userService = ref.read(userServiceProvider);
+      final isAvailable = await userService.isEmailAvailable(email);
+      return isAvailable;
+    } catch (e) {
+      print('Failed to check email availability: $e');
+      return true;
+    }
+  }
+
+  Future<bool> _checkUsernameAvailability(String username) async {
+    try {
+      final userService = ref.read(userServiceProvider);
+      final isAvailable = await userService.isUsernameAvailable(username);
+      return isAvailable;
+    } catch (e) {
+      print('Failed to check username availability: $e');
+      return true;
+    }
+  }
+
+  Future<void> _validateEmail(String email) async {
+    final trimmedEmail = email.trim();
+
+    if (trimmedEmail.isEmpty) {
+      setState(() {
+        _emailError = null;
+        _isEmailValidating = false;
+      });
+      return;
+    }
+
+    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(trimmedEmail)) {
+      setState(() {
+        _emailError = 'Invalid email format';
+        _isEmailValidating = false;
+      });
+      return;
+    }
+
+    // Check if email is different from current user's email
+    if (trimmedEmail.toLowerCase() == widget.user.email?.toLowerCase()) {
+      setState(() {
+        _emailError = null;
+        _isEmailValidating = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _emailError = null;
+      _isEmailValidating = true;
+    });
+
+    final isAvailable = await _checkEmailAvailability(trimmedEmail);
+    if (mounted) {
+      setState(() {
+        _isEmailValidating = false;
+        _emailError = isAvailable ? null : 'Email already exists';
+      });
+    }
+  }
+
+  Future<void> _validateUsername(String username) async {
+    final trimmedUsername = username.trim();
+
+    if (trimmedUsername.isEmpty) {
+      setState(() {
+        _usernameError = null;
+        _isUsernameValidating = false;
+      });
+      return;
+    }
+
+    // Check if username is different from current user's username
+    if (trimmedUsername.toLowerCase() == widget.user.username?.toLowerCase()) {
+      setState(() {
+        _usernameError = null;
+        _isUsernameValidating = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isUsernameValidating = true;
+      _usernameError = null;
+    });
+
+    final isAvailable = await _checkUsernameAvailability(trimmedUsername);
+    if (mounted) {
+      setState(() {
+        _isUsernameValidating = false;
+        _usernameError = isAvailable ? null : 'Username already exists';
+      });
+    }
+  }
+
+  String? _validatePhoneNumber(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter your phone number';
+    }
+
+    // Find the selected country info
+    final selectedCountry = _countryCodes.firstWhere(
+      (country) => country['code'] == _selectedCountryCode,
+      orElse: () => _countryCodes[0],
+    );
+
+    final minLength = selectedCountry['minLength'] as int;
+    final maxLength = selectedCountry['maxLength'] as int;
+    final countryName = selectedCountry['country'] as String;
+
+    // Remove any non-digit characters for validation
+    final digitsOnly = value.replaceAll(RegExp(r'[^\d]'), '');
+
+    if (digitsOnly.length < minLength) {
+      return 'Phone number too short for $countryName (min $minLength digits)';
+    } else if (digitsOnly.length > maxLength) {
+      return 'Phone number too long for $countryName (max $maxLength digits)';
+    }
+
+    return null;
   }
 
   @override
@@ -56,6 +275,11 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _emailController.dispose();
     _phoneNoController.dispose();
     _birthDateController.dispose();
+
+    // Dispose focus nodes
+    _emailFocusNode.dispose();
+    _usernameFocusNode.dispose();
+
     super.dispose();
   }
 
@@ -88,6 +312,41 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   Future<void> _updateProfile() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Additional validation checks
+    final trimmedEmail = _emailController.text.trim();
+    final trimmedUsername = _usernameController.text.trim();
+
+    // Check email availability if changed
+    if (trimmedEmail.toLowerCase() != widget.user.email?.toLowerCase()) {
+      final isEmailAvailable = await _checkEmailAvailability(trimmedEmail);
+      if (!isEmailAvailable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Email already exists. Please use a different email.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
+    // Check username availability if changed
+    if (trimmedUsername.toLowerCase() != widget.user.username?.toLowerCase()) {
+      final isUsernameAvailable =
+          await _checkUsernameAvailability(trimmedUsername);
+      if (!isUsernameAvailable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Username already exists. Please choose a different username.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -113,9 +372,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       // Update user profile
       await userService.updateProfile(
         currentUser.userId,
-        username: _usernameController.text.trim(),
-        email: _emailController.text.trim(),
-        phoneNo: _phoneNoController.text.trim(),
+        username: trimmedUsername,
+        email: trimmedEmail,
+        phoneNo: '$_selectedCountryCode${_phoneNoController.text.trim()}',
         birthDate: birthDate,
         gender: _selectedGender,
         firstName: _firstNameController.text.trim(),
@@ -237,14 +496,47 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     const SizedBox(height: 8),
                     CustomTextField(
                       controller: _usernameController,
+                      focusNode: _usernameFocusNode,
                       labelText: '',
                       useOutlineBorder: true,
+                      onChanged: (value) {
+                        if (_usernameError != null) {
+                          setState(() {
+                            _usernameError = null;
+                            _isUsernameValidating = false;
+                          });
+                        }
+                      },
+                      onFieldSubmitted: (value) => _validateUsername(value),
+                      suffixIcon: _isUsernameValidating
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: Padding(
+                                padding: EdgeInsets.all(12.0),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            )
+                          : _usernameError != null
+                              ? const Icon(Icons.error,
+                                  color: Colors.red, size: 20)
+                              : _usernameController.text.trim().isNotEmpty &&
+                                      _usernameError == null &&
+                                      _usernameController.text.trim().length >=
+                                          3
+                                  ? const Icon(Icons.check_circle,
+                                      color: Colors.green, size: 20)
+                                  : null,
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter username';
                         }
                         if (value.length < 3) {
                           return 'Username must be at least 3 characters';
+                        }
+                        if (_usernameError != null) {
+                          return _usernameError;
                         }
                         return null;
                       },
@@ -257,9 +549,39 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     const SizedBox(height: 8),
                     CustomTextField(
                       controller: _emailController,
+                      focusNode: _emailFocusNode,
                       labelText: '',
                       keyboardType: TextInputType.emailAddress,
                       useOutlineBorder: true,
+                      onChanged: (value) {
+                        if (_emailError != null) {
+                          setState(() {
+                            _emailError = null;
+                            _isEmailValidating = false;
+                          });
+                        }
+                      },
+                      onFieldSubmitted: (value) => _validateEmail(value),
+                      suffixIcon: _isEmailValidating
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: Padding(
+                                padding: EdgeInsets.all(12),
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: AppColors.cyellow),
+                              ))
+                          : _emailError != null
+                              ? const Icon(Icons.error,
+                                  color: Colors.red, size: 20)
+                              : _emailController.text.trim().isNotEmpty &&
+                                      _emailError == null &&
+                                      RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                                          .hasMatch(
+                                              _emailController.text.trim())
+                                  ? const Icon(Icons.check_circle,
+                                      color: Colors.green, size: 20)
+                                  : null,
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter email';
@@ -268,26 +590,75 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                             .hasMatch(value)) {
                           return 'Please enter a valid email';
                         }
+                        if (_emailError != null) {
+                          return _emailError;
+                        }
                         return null;
                       },
                     ),
 
                     const SizedBox(height: 20),
 
-                    // Phone Field
+                    // Phone Number Row
                     _buildFieldLabel('Phone No.'),
                     const SizedBox(height: 8),
-                    CustomTextField(
-                      controller: _phoneNoController,
-                      labelText: '',
-                      keyboardType: TextInputType.phone,
-                      useOutlineBorder: true,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter phone number';
-                        }
-                        return null;
-                      },
+                    Row(
+                      children: [
+                        // Country Code Dropdown
+                        Container(
+                          height: 56,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedCountryCode,
+                              items: _countryCodes.map((country) {
+                                return DropdownMenuItem<String>(
+                                  value: country['code'],
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        country['flag']!,
+                                        style: const TextStyle(fontSize: 18),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        country['code']!,
+                                        style: const TextStyle(fontSize: 16),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (String? newValue) {
+                                setState(() {
+                                  _selectedCountryCode = newValue!;
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+
+                        // Phone Number Input
+                        Expanded(
+                          child: CustomTextField(
+                            controller: _phoneNoController,
+                            labelText: '',
+                            keyboardType: TextInputType.phone,
+                            useOutlineBorder: true,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(15),
+                            ],
+                            validator: _validatePhoneNumber,
+                          ),
+                        ),
+                      ],
                     ),
 
                     const SizedBox(height: 20),

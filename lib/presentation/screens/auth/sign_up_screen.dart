@@ -28,6 +28,10 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   final _phoneNoController = TextEditingController();
   final _birthDateController = TextEditingController();
 
+  // Focus nodes for validation
+  final _emailFocusNode = FocusNode();
+  final _usernameFocusNode = FocusNode();
+
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isEmailValidating = false;
@@ -84,6 +88,23 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   @override
   void initState() {
     super.initState();
+    _initializeFocusListeners();
+  }
+
+  void _initializeFocusListeners() {
+    // Email focus listener
+    _emailFocusNode.addListener(() {
+      if (!_emailFocusNode.hasFocus && _emailController.text.isNotEmpty) {
+        _validateEmail(_emailController.text);
+      }
+    });
+
+    // Username focus listener
+    _usernameFocusNode.addListener(() {
+      if (!_usernameFocusNode.hasFocus && _usernameController.text.isNotEmpty) {
+        _validateUsername(_usernameController.text);
+      }
+    });
   }
 
   Future<void> _selectDate() async {
@@ -136,7 +157,9 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   }
 
   Future<void> _validateEmail(String email) async {
-    if (email.isEmpty) {
+    final trimmedEmail = email.trim();
+
+    if (trimmedEmail.isEmpty) {
       setState(() {
         _emailError = null;
         _isEmailValidating = false;
@@ -144,7 +167,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       return;
     }
 
-    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
+    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(trimmedEmail)) {
       setState(() {
         _emailError = 'Invalid email format';
         _isEmailValidating = false;
@@ -157,7 +180,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       _isEmailValidating = true;
     });
 
-    final isAvailable = await _checkEmailAvailability(email);
+    final isAvailable = await _checkEmailAvailability(trimmedEmail);
     if (mounted) {
       setState(() {
         _isEmailValidating = false;
@@ -167,7 +190,9 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   }
 
   Future<void> _validateUsername(String username) async {
-    if (username.isEmpty) {
+    final trimmedUsername = username.trim();
+
+    if (trimmedUsername.isEmpty) {
       setState(() {
         _usernameError = null;
         _isUsernameValidating = false;
@@ -180,7 +205,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       _usernameError = null;
     });
 
-    final isAvailable = await _checkUsernameAvailability(username);
+    final isAvailable = await _checkUsernameAvailability(trimmedUsername);
     if (mounted) {
       setState(() {
         _isUsernameValidating = false;
@@ -233,12 +258,19 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   }
 
   void _navigateToLogin() {
-    if (mounted) {
+    print('🔄 Attempting to navigate to SignInScreen...');
+    print('📱 Widget mounted: $mounted');
+    print('🎯 Context: $context');
+
+    try {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const SignInScreen()),
         (route) => false,
       );
+      print('✅ Navigation to SignInScreen successful');
+    } catch (e) {
+      print('❌ Navigation failed: $e');
     }
   }
 
@@ -339,25 +371,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
       builder: (context, ref, child) {
         final authState = ref.watch(authProvider);
 
-        if (authState.isLoading) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) => const Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.cyellow),
-                ),
-              ),
-            );
-          });
-        }
-
         ref.listen(authProvider, (previous, current) {
-          if (previous?.isLoading == true && current.isLoading == false) {
-            Navigator.pop(context);
-          }
-
           if (current.errorMessage != null) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -367,7 +381,10 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
             );
           }
 
-          if (current.user != null && !current.isLoading) {
+          if (previous?.isLoading == true &&
+              !current.isLoading &&
+              current.errorMessage == null &&
+              current.user == null) {
             // Show success dialog and navigate to sign in
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) {
@@ -397,407 +414,456 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
         });
 
         return Scaffold(
-          body: Container(
-            decoration: const BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage('assets/images/AuthBackground.png'),
-                fit: BoxFit.cover,
-              ),
-            ),
-            child: SafeArea(
-              child: Stack(
-                children: [
-                  // Main content
-                  Center(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(height: 40),
-                          // Title
-                          const Text(
-                            'Sign Up',
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 40),
-                          // Form Card
-                          Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 5),
+          resizeToAvoidBottomInset: false,
+          body: authState.isLoading
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(AppColors.cyellow),
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        'Creating your account...',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : Container(
+                  decoration: const BoxDecoration(
+                    image: DecorationImage(
+                      image: AssetImage('assets/images/AuthBackground.png'),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  child: SafeArea(
+                    child: Stack(
+                      children: [
+                        // Main content
+                        Center(
+                          child: SingleChildScrollView(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 24.0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const SizedBox(height: 40),
+                                // Title
+                                const Text(
+                                  'Sign Up',
+                                  style: TextStyle(
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
                                 ),
-                              ],
-                            ),
-                            child: Form(
-                              key: _formKey,
-                              child: Column(
-                                children: [
-                                  // First Name and Last Name Row
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: CustomTextField(
-                                          controller: _firstNameController,
-                                          labelText: 'First Name',
-                                          useOutlineBorder: true,
-                                          validator: (value) {
-                                            if (value == null ||
-                                                value.isEmpty) {
-                                              return 'Please enter first name';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Expanded(
-                                        child: CustomTextField(
-                                          controller: _lastNameController,
-                                          labelText: 'Last Name',
-                                          useOutlineBorder: true,
-                                          validator: (value) {
-                                            if (value == null ||
-                                                value.isEmpty) {
-                                              return 'Please enter last name';
-                                            }
-                                            return null;
-                                          },
-                                        ),
+                                const SizedBox(height: 40),
+                                // Form Card
+                                Container(
+                                  padding: const EdgeInsets.all(24),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 5),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 20),
-
-                                  // Email
-                                  CustomTextField(
-                                    controller: _emailController,
-                                    labelText: 'Email',
-                                    keyboardType: TextInputType.emailAddress,
-                                    useOutlineBorder: true,
-                                    onChanged: (value) {
-                                      if (_emailError != null) {
-                                        setState(() {
-                                          _emailError = null;
-                                          _isEmailValidating = false;
-                                        });
-                                      }
-                                    },
-                                    onFieldSubmitted: (value) =>
-                                        _validateEmail(value),
-                                    onTap: () {
-                                      if (_emailController.text.isNotEmpty) {
-                                        _validateEmail(_emailController.text);
-                                      }
-                                    },
-                                    suffixIcon: _isEmailValidating
-                                        ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: Padding(
-                                              padding: EdgeInsets.all(12),
-                                              child:
-                                                  CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      color: AppColors.cyellow),
-                                            ))
-                                        : _emailError != null
-                                            ? const Icon(Icons.error,
-                                                color: Colors.red, size: 20)
-                                            : _emailController
-                                                        .text.isNotEmpty &&
-                                                    _emailError == null &&
-                                                    RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                                                        .hasMatch(
-                                                            _emailController
-                                                                .text)
-                                                ? const Icon(Icons.check_circle,
-                                                    color: Colors.green,
-                                                    size: 20)
-                                                : null,
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'Please enter email';
-                                      }
-                                      if (!RegExp(
-                                              r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                                          .hasMatch(value)) {
-                                        return 'Please enter a valid email';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 20),
-
-                                  // Birth Date
-                                  GestureDetector(
-                                    onTap: _selectDate,
-                                    child: AbsorbPointer(
-                                      child: CustomTextField(
-                                        controller: _birthDateController,
-                                        labelText: 'Date of Birth',
-                                        useOutlineBorder: true,
-                                        suffixIcon: const Icon(
-                                          Icons.calendar_today,
-                                          color: Colors.grey,
-                                          size: 20,
+                                  child: Form(
+                                    key: _formKey,
+                                    child: Column(
+                                      children: [
+                                        // First Name and Last Name Row
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: CustomTextField(
+                                                controller:
+                                                    _firstNameController,
+                                                labelText: 'First Name',
+                                                useOutlineBorder: true,
+                                                validator: (value) {
+                                                  if (value == null ||
+                                                      value.isEmpty) {
+                                                    return 'Please enter first name';
+                                                  }
+                                                  return null;
+                                                },
+                                              ),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            Expanded(
+                                              child: CustomTextField(
+                                                controller: _lastNameController,
+                                                labelText: 'Last Name',
+                                                useOutlineBorder: true,
+                                                validator: (value) {
+                                                  if (value == null ||
+                                                      value.isEmpty) {
+                                                    return 'Please enter last name';
+                                                  }
+                                                  return null;
+                                                },
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                        validator: _validateBirthDate,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 20),
+                                        const SizedBox(height: 20),
 
-                                  // Phone Number Row
-                                  Row(
-                                    children: [
-                                      // Country Code Dropdown
-                                      Container(
-                                        height: 56,
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 12),
-                                        decoration: BoxDecoration(
-                                          border: Border.all(
-                                              color: Colors.grey.shade300),
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                        child: DropdownButtonHideUnderline(
-                                          child: DropdownButton<String>(
-                                            value: _selectedCountryCode,
-                                            items: _countryCodes.map((country) {
-                                              return DropdownMenuItem<String>(
-                                                value: country['code'],
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    Text(
-                                                      country['flag']!,
-                                                      style: const TextStyle(
-                                                          fontSize: 18),
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    Text(
-                                                      country['code']!,
-                                                      style: const TextStyle(
-                                                          fontSize: 16),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            }).toList(),
-                                            onChanged: (String? newValue) {
+                                        // Email
+                                        CustomTextField(
+                                          controller: _emailController,
+                                          focusNode: _emailFocusNode,
+                                          labelText: 'Email',
+                                          keyboardType:
+                                              TextInputType.emailAddress,
+                                          useOutlineBorder: true,
+                                          onChanged: (value) {
+                                            if (_emailError != null) {
                                               setState(() {
-                                                _selectedCountryCode =
-                                                    newValue!;
+                                                _emailError = null;
+                                                _isEmailValidating = false;
+                                              });
+                                            }
+                                          },
+                                          onFieldSubmitted: (value) =>
+                                              _validateEmail(value),
+                                          suffixIcon: _isEmailValidating
+                                              ? const SizedBox(
+                                                  width: 20,
+                                                  height: 20,
+                                                  child: Padding(
+                                                    padding: EdgeInsets.all(12),
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                            color: AppColors
+                                                                .cyellow),
+                                                  ))
+                                              : _emailError != null
+                                                  ? const Icon(Icons.error,
+                                                      color: Colors.red,
+                                                      size: 20)
+                                                  : _emailController.text
+                                                              .trim()
+                                                              .isNotEmpty &&
+                                                          _emailError == null &&
+                                                          RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                                                              .hasMatch(
+                                                                  _emailController
+                                                                      .text
+                                                                      .trim())
+                                                      ? const Icon(
+                                                          Icons.check_circle,
+                                                          color: Colors.green,
+                                                          size: 20)
+                                                      : null,
+                                          validator: (value) {
+                                            if (value == null ||
+                                                value.isEmpty) {
+                                              return 'Please enter email';
+                                            }
+                                            if (!RegExp(
+                                                    r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                                                .hasMatch(value)) {
+                                              return 'Please enter a valid email';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                        const SizedBox(height: 20),
+
+                                        // Birth Date
+                                        GestureDetector(
+                                          onTap: _selectDate,
+                                          child: AbsorbPointer(
+                                            child: CustomTextField(
+                                              controller: _birthDateController,
+                                              labelText: 'Date of Birth',
+                                              useOutlineBorder: true,
+                                              suffixIcon: const Icon(
+                                                Icons.calendar_today,
+                                                color: Colors.grey,
+                                                size: 20,
+                                              ),
+                                              validator: _validateBirthDate,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 20),
+
+                                        // Phone Number Row
+                                        Row(
+                                          children: [
+                                            // Country Code Dropdown
+                                            Container(
+                                              height: 56,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 12),
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                    color:
+                                                        Colors.grey.shade300),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child:
+                                                  DropdownButtonHideUnderline(
+                                                child: DropdownButton<String>(
+                                                  value: _selectedCountryCode,
+                                                  items: _countryCodes
+                                                      .map((country) {
+                                                    return DropdownMenuItem<
+                                                        String>(
+                                                      value: country['code'],
+                                                      child: Row(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          Text(
+                                                            country['flag']!,
+                                                            style:
+                                                                const TextStyle(
+                                                                    fontSize:
+                                                                        18),
+                                                          ),
+                                                          const SizedBox(
+                                                              width: 4),
+                                                          Text(
+                                                            country['code']!,
+                                                            style:
+                                                                const TextStyle(
+                                                                    fontSize:
+                                                                        16),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    );
+                                                  }).toList(),
+                                                  onChanged:
+                                                      (String? newValue) {
+                                                    setState(() {
+                                                      _selectedCountryCode =
+                                                          newValue!;
+                                                    });
+                                                  },
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+
+                                            // Phone Number Input
+                                            Expanded(
+                                              child: CustomTextField(
+                                                controller: _phoneNoController,
+                                                labelText: 'Phone Number',
+                                                keyboardType:
+                                                    TextInputType.phone,
+                                                useOutlineBorder: true,
+                                                inputFormatters: [
+                                                  FilteringTextInputFormatter
+                                                      .digitsOnly,
+                                                  LengthLimitingTextInputFormatter(
+                                                      15),
+                                                ],
+                                                validator: _validatePhoneNumber,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 20),
+
+                                        // Username
+                                        CustomTextField(
+                                          controller: _usernameController,
+                                          focusNode: _usernameFocusNode,
+                                          labelText: 'Username',
+                                          useOutlineBorder: true,
+                                          onChanged: (value) {
+                                            if (_usernameError != null) {
+                                              setState(() {
+                                                _usernameError = null;
+                                                _isUsernameValidating = false;
+                                              });
+                                            }
+                                          },
+                                          onFieldSubmitted: (value) =>
+                                              _validateUsername(value),
+                                          suffixIcon: _isUsernameValidating
+                                              ? const SizedBox(
+                                                  width: 20,
+                                                  height: 20,
+                                                  child: Padding(
+                                                    padding:
+                                                        EdgeInsets.all(12.0),
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                            strokeWidth: 2),
+                                                  ),
+                                                )
+                                              : _usernameError != null
+                                                  ? const Icon(Icons.error,
+                                                      color: Colors.red,
+                                                      size: 20)
+                                                  : _usernameController.text
+                                                              .trim()
+                                                              .isNotEmpty &&
+                                                          _usernameError ==
+                                                              null &&
+                                                          _usernameController
+                                                                  .text
+                                                                  .trim()
+                                                                  .length >=
+                                                              3
+                                                      ? const Icon(
+                                                          Icons.check_circle,
+                                                          color: Colors.green,
+                                                          size: 20)
+                                                      : null,
+                                          validator: (value) {
+                                            if (value == null ||
+                                                value.isEmpty) {
+                                              return 'Please enter username';
+                                            }
+                                            if (value.length < 3) {
+                                              return 'Username must be at least 3 characters';
+                                            }
+                                            if (_usernameError != null) {
+                                              return _usernameError;
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                        const SizedBox(height: 20),
+
+                                        // Password
+                                        CustomTextField(
+                                          controller: _passwordController,
+                                          labelText: 'Password',
+                                          obscureText: !_isPasswordVisible,
+                                          useOutlineBorder: true,
+                                          suffixIcon: IconButton(
+                                            icon: Icon(
+                                              _isPasswordVisible
+                                                  ? Icons.visibility
+                                                  : Icons.visibility_off,
+                                              color: Colors.grey,
+                                              size: 20,
+                                            ),
+                                            onPressed: () {
+                                              setState(() {
+                                                _isPasswordVisible =
+                                                    !_isPasswordVisible;
                                               });
                                             },
                                           ),
+                                          validator: _validatePassword,
                                         ),
-                                      ),
-                                      const SizedBox(width: 12),
+                                        const SizedBox(height: 20),
 
-                                      // Phone Number Input
-                                      Expanded(
-                                        child: CustomTextField(
-                                          controller: _phoneNoController,
-                                          labelText: 'Phone Number',
-                                          keyboardType: TextInputType.phone,
+                                        // Confirm Password
+                                        CustomTextField(
+                                          controller:
+                                              _confirmPasswordController,
+                                          labelText: 'Confirm Password',
+                                          obscureText:
+                                              !_isConfirmPasswordVisible,
                                           useOutlineBorder: true,
-                                          inputFormatters: [
-                                            FilteringTextInputFormatter
-                                                .digitsOnly,
-                                            LengthLimitingTextInputFormatter(
-                                                15),
-                                          ],
-                                          validator: _validatePhoneNumber,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 20),
-
-                                  // Username
-                                  CustomTextField(
-                                    controller: _usernameController,
-                                    labelText: 'Username',
-                                    useOutlineBorder: true,
-                                    onChanged: (value) {
-                                      if (_usernameError != null) {
-                                        setState(() {
-                                          _usernameError = null;
-                                          _isUsernameValidating = false;
-                                        });
-                                      }
-                                    },
-                                    onFieldSubmitted: (value) =>
-                                        _validateUsername(value),
-                                    onTap: () {
-                                      if (_usernameController.text.isNotEmpty) {
-                                        _validateUsername(
-                                            _usernameController.text);
-                                      }
-                                    },
-                                    suffixIcon: _isUsernameValidating
-                                        ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: Padding(
-                                              padding: EdgeInsets.all(12.0),
-                                              child: CircularProgressIndicator(
-                                                  strokeWidth: 2),
+                                          suffixIcon: IconButton(
+                                            icon: Icon(
+                                              _isConfirmPasswordVisible
+                                                  ? Icons.visibility
+                                                  : Icons.visibility_off,
+                                              color: Colors.grey,
+                                              size: 20,
                                             ),
-                                          )
-                                        : _usernameError != null
-                                            ? const Icon(Icons.error,
-                                                color: Colors.red, size: 20)
-                                            : _usernameController
-                                                        .text.isNotEmpty &&
-                                                    _usernameError == null &&
-                                                    _usernameController
-                                                            .text.length >=
-                                                        3
-                                                ? const Icon(Icons.check,
-                                                    color: Colors.green,
-                                                    size: 20)
-                                                : null,
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'Please enter username';
-                                      }
-                                      if (value.length < 3) {
-                                        return 'Username must be at least 3 characters';
-                                      }
-                                      if (_usernameError != null) {
-                                        return _usernameError;
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 20),
+                                            onPressed: () {
+                                              setState(() {
+                                                _isConfirmPasswordVisible =
+                                                    !_isConfirmPasswordVisible;
+                                              });
+                                            },
+                                          ),
+                                          validator: (value) {
+                                            if (value == null ||
+                                                value.isEmpty) {
+                                              return 'Please confirm your password';
+                                            }
+                                            if (value !=
+                                                _passwordController.text) {
+                                              return 'Password does not match';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                        const SizedBox(height: 32),
 
-                                  // Password
-                                  CustomTextField(
-                                    controller: _passwordController,
-                                    labelText: 'Password',
-                                    obscureText: !_isPasswordVisible,
-                                    useOutlineBorder: true,
-                                    suffixIcon: IconButton(
-                                      icon: Icon(
-                                        _isPasswordVisible
-                                            ? Icons.visibility
-                                            : Icons.visibility_off,
-                                        color: Colors.grey,
-                                        size: 20,
-                                      ),
-                                      onPressed: () {
-                                        setState(() {
-                                          _isPasswordVisible =
-                                              !_isPasswordVisible;
-                                        });
-                                      },
+                                        // Register Button
+                                        CustomButton(
+                                          text: 'Register',
+                                          onPressed: authState.isLoading
+                                              ? null
+                                              : _register,
+                                          isLoading: authState.isLoading,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            const Text(
+                                                'Already have an account? ',
+                                                style: TextStyle(
+                                                    color: AppColors.cdarkgrey,
+                                                    fontSize: 16)),
+                                            GestureDetector(
+                                              onTap: _navigateToLogin,
+                                              child: const Text('Sign In',
+                                                  style: TextStyle(
+                                                      color: AppColors.cyellow,
+                                                      fontSize: 16)),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
-                                    validator: _validatePassword,
                                   ),
-                                  const SizedBox(height: 20),
-
-                                  // Confirm Password
-                                  CustomTextField(
-                                    controller: _confirmPasswordController,
-                                    labelText: 'Confirm Password',
-                                    obscureText: !_isConfirmPasswordVisible,
-                                    useOutlineBorder: true,
-                                    suffixIcon: IconButton(
-                                      icon: Icon(
-                                        _isConfirmPasswordVisible
-                                            ? Icons.visibility
-                                            : Icons.visibility_off,
-                                        color: Colors.grey,
-                                        size: 20,
-                                      ),
-                                      onPressed: () {
-                                        setState(() {
-                                          _isConfirmPasswordVisible =
-                                              !_isConfirmPasswordVisible;
-                                        });
-                                      },
-                                    ),
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'Please confirm your password';
-                                      }
-                                      if (value != _passwordController.text) {
-                                        return 'Password does not match';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 32),
-
-                                  // Register Button
-                                  CustomButton(
-                                    text: 'Register',
-                                    onPressed:
-                                        authState.isLoading ? null : _register,
-                                    isLoading: authState.isLoading,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Text('Already have an account? ',
-                                          style: TextStyle(
-                                              color: AppColors.cdarkgrey,
-                                              fontSize: 16)),
-                                      GestureDetector(
-                                        onTap: _navigateToLogin,
-                                        child: const Text('Sign In',
-                                            style: TextStyle(
-                                                color: AppColors.cyellow,
-                                                fontSize: 16)),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                                ),
+                                const SizedBox(height: 40),
+                              ],
+                            ),
+                          ),
+                        ),
+                        // Back button
+                        Positioned(
+                          top: 0,
+                          left: 16,
+                          child: GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              child: const Icon(
+                                Icons.arrow_back,
+                                color: Colors.white,
+                                size: 24,
                               ),
                             ),
                           ),
-                          const SizedBox(height: 40),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Back button
-                  Positioned(
-                    top: 0,
-                    left: 16,
-                    child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        child: const Icon(
-                          Icons.arrow_back,
-                          color: Colors.white,
-                          size: 24,
                         ),
-                      ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
+                ),
         );
       },
     );
@@ -813,6 +879,11 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     _lastNameController.dispose();
     _phoneNoController.dispose();
     _birthDateController.dispose();
+
+    // Dispose focus nodes
+    _emailFocusNode.dispose();
+    _usernameFocusNode.dispose();
+
     super.dispose();
   }
 }
