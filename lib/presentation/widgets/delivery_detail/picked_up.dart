@@ -1,30 +1,35 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../domain/entities/delivery.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/entities/delivery_part.dart';
-import '../../../domain/entities/part.dart'; // Add this import for Part entity
+import '../../../domain/entities/part.dart';
 import '../../../domain/services/delivery_service.dart';
 import '../../../domain/services/user_service.dart';
 import '../../../domain/services/delivery_part_service.dart';
-import '../../../domain/services/part_service.dart'; // Add this import for PartService
+import '../../../domain/services/part_service.dart';
 import '../../../data/repositories/delivery_repository_impl.dart';
 import '../../../data/repositories/user_repository_impl.dart';
 import '../../../data/repositories/delivery_part_repository_impl.dart';
-import '../../../data/repositories/part_repository_impl.dart'; // Add this import for PartRepositoryImpl
+import '../../../data/repositories/part_repository_impl.dart';
 import '../../../data/datasources/local/local_delivery_database_service.dart';
 import '../../../data/datasources/local/local_user_database_service.dart';
 import '../../../data/datasources/local/local_delivery_part_database_service.dart';
-import '../../../data/datasources/local/local_part_database_service.dart'; // Add this import for LocalPartDatabaseService
+import '../../../data/datasources/local/local_part_database_service.dart';
 import '../../../data/datasources/remote/remote_delivery_datasource.dart';
 import '../../../data/datasources/remote/remote_user_datasource.dart';
 import '../../../data/datasources/remote/remote_delivery_part_datasource.dart';
-import '../../../data/datasources/remote/remote_part_datasource.dart'; // Add this import for RemotePartDataSource
+import '../../../data/datasources/remote/remote_part_datasource.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/network_service.dart';
+import '../../../core/utils/distance_calculator.dart';
 import '../../providers/auth_provider.dart';
-
+import '../../../domain/services/location_service.dart';
+import '../../../data/repositories/location_repository_impl.dart';
+import '../../../data/datasources/local/local_location_database_service.dart';
+import '../../../data/datasources/remote/remote_location_datasource.dart';
 
 class PickedUpPage extends ConsumerStatefulWidget {
   final Delivery delivery;
@@ -42,18 +47,27 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
   late final DeliveryService _deliveryService;
   late final UserService _userService;
   late final DeliveryPartService _deliveryPartService;
-  late final PartService _partService; // Add PartService
+  late final PartService _partService;
   late final DeliveryRepositoryImpl _deliveryRepository;
   late final UserRepositoryImpl _userRepository;
   late final DeliveryPartRepositoryImpl _deliveryPartRepository;
-  late final PartRepositoryImpl _partRepository; // Add PartRepositoryImpl
+  late final PartRepositoryImpl _partRepository;
+  late final LocationService _locationService;
+  late final LocationRepositoryImpl _locationRepository;
+  late final _url = "https://www.poslaju.com.my";
+
   bool _isUpdating = false;
   bool _isLoadingParts = true;
   Delivery? _currentDelivery;
   User? _currentUser;
   List<DeliveryPart> _deliveryParts = [];
-  Map<String, Part?> _partsMap = {}; // Map to store Part details by partId
+  Map<String, Part?> _partsMap = {};
   String? _errorMessage;
+
+
+  // Constants for calculations
+  static const double averageSpeedKmh = 50.0; // Assumption: 50 km/h
+  static const double timePerKmMinutes = 1.0; // Assumption: 1 minute per km
 
 
   @override
@@ -67,32 +81,39 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
 
 
   void _initializeServices() {
-    // Initialize delivery services
     final localDeliveryDataSource = LocalDeliveryDatabaseService();
     final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
-    _deliveryRepository = DeliveryRepositoryImpl(localDeliveryDataSource, remoteDeliveryDataSource);
+    _deliveryRepository = DeliveryRepositoryImpl(
+        localDeliveryDataSource, remoteDeliveryDataSource);
     _deliveryService = DeliveryService(_deliveryRepository);
 
 
-    // Initialize user services
     final localUserDataSource = LocalUserDatabaseService();
     final remoteUserDataSource = SupabaseUserDataSource();
-    _userRepository = UserRepositoryImpl(localUserDataSource, remoteUserDataSource);
+    _userRepository =
+        UserRepositoryImpl(localUserDataSource, remoteUserDataSource);
     _userService = UserService(_userRepository);
 
 
-    // Initialize delivery part services
     final localDeliveryPartDataSource = LocalDeliveryPartDatabaseService();
     final remoteDeliveryPartDataSource = SupabaseDeliveryPartDataSource();
-    _deliveryPartRepository = DeliveryPartRepositoryImpl(localDeliveryPartDataSource, remoteDeliveryPartDataSource);
+    _deliveryPartRepository = DeliveryPartRepositoryImpl(
+        localDeliveryPartDataSource, remoteDeliveryPartDataSource);
     _deliveryPartService = DeliveryPartService(_deliveryPartRepository);
 
 
-    // Initialize part services
     final localPartDataSource = LocalPartDatabaseService();
     final remotePartDataSource = SupabasePartDataSource();
-    _partRepository = PartRepositoryImpl(localPartDataSource, remotePartDataSource);
+    _partRepository =
+        PartRepositoryImpl(localPartDataSource, remotePartDataSource);
     _partService = PartService(_partRepository);
+
+
+    final localLocationDataSource = LocalLocationDatabaseService();
+    final remoteLocationDataSource = SupabaseLocationDataSource();
+    _locationRepository = LocationRepositoryImpl(
+        localLocationDataSource, remoteLocationDataSource);
+    _locationService = LocationService(_locationRepository);
   }
 
 
@@ -100,8 +121,8 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
     try {
       final authState = ref.read(authProvider);
       if (authState.user != null) {
-        // Fix: Use watchUserById and get the first value
-        final user = await _userService.watchUserById(authState.user!.userId).first;
+        final user =
+        await _userService.watchUserById(authState.user!.userId).first;
         if (mounted) {
           setState(() {
             _currentUser = user;
@@ -129,16 +150,17 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
 
 
     try {
-      // Fix: Use watchAllDeliveryParts and filter by deliveryId
       final allParts = await _deliveryPartService.watchAllDeliveryParts().first;
-      final deliveryParts = allParts.where((part) => part.deliveryId == widget.delivery.deliveryId).toList();
+      final deliveryParts = allParts
+          .where((part) => part.deliveryId == widget.delivery.deliveryId)
+          .toList();
 
 
-      // Fetch Part details for each DeliveryPart
       final partsMap = <String, Part?>{};
       for (final deliveryPart in deliveryParts) {
         if (deliveryPart.partId != null) {
-          final part = await _partService.watchPartById(deliveryPart.partId!).first;
+          final part =
+          await _partService.watchPartById(deliveryPart.partId!).first;
           partsMap[deliveryPart.partId!] = part;
         }
       }
@@ -183,12 +205,12 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
 
 
     try {
-      // Fix: Use updateDelivery with a modified Delivery object
-      final updatedDelivery = _currentDelivery!.copyWith(status: newStatus, updatedAt: DateTime.now());
+      final updatedDelivery = _currentDelivery!
+          .copyWith(status: newStatus, updatedAt: DateTime.now());
       final result = await _deliveryService.updateDelivery(updatedDelivery);
 
 
-      if (result != null && mounted) {
+      if (mounted) {
         setState(() {
           _currentDelivery = result;
         });
@@ -219,24 +241,44 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
 
 
   double _calculateProgress() {
-    if (_currentDelivery == null) return 0.1;
-
-    switch (_currentDelivery!.status?.toLowerCase()) {
-      case 'pending':
-        return 0.1;
-      case 'awaiting':
-        return 0.3;
-      case 'picked up':
-        return 0.5;
-      case 'en route':
-        return 0.8;
-      case 'delivered':
-        return 1.0;
-      default:
-        return 0.1;
+    if (_currentDelivery == null ||
+        _currentDelivery!.pickupTime == null ||
+        _currentDelivery!.dueDatetime == null) {
+      return 0.0;
     }
+
+
+    final now = DateTime.now();
+    final pickupTime = _currentDelivery!.pickupTime!;
+    final eta = _currentDelivery!.dueDatetime!;
+
+
+    if (now.isBefore(pickupTime)) return 0.0; // Not started
+    if (now.isAfter(eta)) return 1.0; // Completed
+
+
+    final elapsed = now.difference(pickupTime).inMinutes;
+    final totalEstimated = eta.difference(pickupTime).inMinutes;
+
+
+    return totalEstimated > 0 ? elapsed / totalEstimated : 0.0;
   }
 
+
+  Future<String> _calculateDistanceAndTime() async {
+    return await _locationService.calculateDistanceAndTime(
+      _currentDelivery?.pickupLocation,
+      _currentDelivery?.deliveryLocation,
+    );
+  }
+
+  Future<void> launchMyUrl(String url) async{
+    final Uri uri = Uri.parse(url);
+
+    if (!await launchUrl(uri)){
+      throw Exception('Could not launch $uri');
+    }
+  }
 
   ImageProvider? _getProfileImage(User user) {
     if (user.profilePath == null || user.profilePath!.isEmpty) {
@@ -269,7 +311,8 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
           foregroundColor: Colors.white,
         ),
         body: const Center(
-          child: Text('Delivery not found', style: TextStyle(color: Colors.white)),
+          child:
+          Text('Delivery not found', style: TextStyle(color: Colors.white)),
         ),
       );
     }
@@ -292,7 +335,10 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
           children: [
             const Text(
               'Picked Up',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold),
             ),
             const SizedBox(width: 8),
             Text(
@@ -309,12 +355,15 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
             child: CircleAvatar(
               radius: 18,
               backgroundColor: Colors.grey.shade300,
-              backgroundImage: _currentUser != null ? _getProfileImage(_currentUser!) : null,
-              child: _currentUser != null && _getProfileImage(_currentUser!) == null
+              backgroundImage:
+              _currentUser != null ? _getProfileImage(_currentUser!) : null,
+              child: _currentUser != null &&
+                  _getProfileImage(_currentUser!) == null
                   ? (_currentUser!.username?.isNotEmpty == true
                   ? Text(
                 _currentUser!.username![0].toUpperCase(),
-                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    color: Colors.black, fontWeight: FontWeight.bold),
               )
                   : const Icon(Icons.person, color: Colors.black, size: 20))
                   : null,
@@ -350,18 +399,33 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                               ),
                             ),
                             const SizedBox(height: 6),
-                            Text(
-                              delivery.pickupLocation ?? 'STORAGE',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
+                            FutureBuilder<String>(
+                              future: _locationService
+                                  .getLocationName(delivery.pickupLocation),
+                              builder: (context, snapshot) {
+                                return Text(
+                                  snapshot.data ?? 'Unknown',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                );
+                              },
                             ),
                             const SizedBox(height: 4),
-                            Text(
-                              'Storage B',
-                              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                            FutureBuilder<String>(
+                              future: _locationService
+                                  .getLocationAddress(delivery.pickupLocation),
+                              builder: (context, snapshot) {
+                                return Text(
+                                  snapshot.data ?? 'No address available',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontSize: 14,
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -379,20 +443,35 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                               ),
                             ),
                             const SizedBox(height: 6),
-                            Text(
-                              delivery.deliveryLocation ?? 'BAY 1B',
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
+                            FutureBuilder<String>(
+                              future: _locationService
+                                  .getLocationName(delivery.deliveryLocation),
+                              builder: (context, snapshot) {
+                                return Text(
+                                  snapshot.data ?? 'Unknown',
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                );
+                              },
                             ),
                             const SizedBox(height: 4),
-                            Text(
-                              'Service Bay',
-                              textAlign: TextAlign.right,
-                              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                            FutureBuilder<String>(
+                              future: _locationService.getLocationAddress(
+                                  delivery.deliveryLocation),
+                              builder: (context, snapshot) {
+                                return Text(
+                                  snapshot.data ?? 'No address available',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontSize: 14,
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -425,13 +504,20 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '0.1 km • 5 min',
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                      FutureBuilder<String>(
+                        future: _calculateDistanceAndTime(),
+                        builder: (context, snapshot) {
+                          return Text(
+                            snapshot.data ?? '0.1 km • 5 min',
+                            style: TextStyle(
+                                color: Colors.grey.shade400, fontSize: 14),
+                          );
+                        },
                       ),
                       Text(
                         'Due: ${_formatDateTime(delivery.dueDatetime)}',
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                        style: TextStyle(
+                            color: Colors.grey.shade400, fontSize: 14),
                       ),
                     ],
                   ),
@@ -459,7 +545,8 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                         children: [
                           Text(
                             'Pick up at',
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                            style: TextStyle(
+                                color: Colors.grey.shade400, fontSize: 14),
                           ),
                           const SizedBox(height: 8),
                           Text(
@@ -473,7 +560,8 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                           const SizedBox(height: 4),
                           Text(
                             'Actual',
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                            style: TextStyle(
+                                color: Colors.grey.shade400, fontSize: 12),
                           ),
                         ],
                       ),
@@ -483,7 +571,8 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                         children: [
                           Text(
                             'ETA',
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                            style: TextStyle(
+                                color: Colors.grey.shade400, fontSize: 14),
                           ),
                           const SizedBox(height: 8),
                           Text(
@@ -497,7 +586,8 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                           const SizedBox(height: 4),
                           Text(
                             'Estimated',
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                            style: TextStyle(
+                                color: Colors.grey.shade400, fontSize: 12),
                           ),
                         ],
                       ),
@@ -507,7 +597,8 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                   LinearProgressIndicator(
                     value: progress,
                     backgroundColor: Colors.grey.shade700,
-                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4B97FA)),
+                    valueColor:
+                    const AlwaysStoppedAnimation<Color>(Color(0xFF4B97FA)),
                     minHeight: 6,
                   ),
                   const SizedBox(height: 8),
@@ -515,7 +606,8 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                     alignment: Alignment.centerRight,
                     child: Text(
                       '${(progress * 100).toInt()}%',
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                      style:
+                      TextStyle(color: Colors.grey.shade400, fontSize: 14),
                     ),
                   ),
                 ],
@@ -550,7 +642,8 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                       child: Padding(
                         padding: EdgeInsets.all(20),
                         child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4B97FA)),
+                          valueColor:
+                          AlwaysStoppedAnimation<Color>(Color(0xFF4B97FA)),
                         ),
                       ),
                     )
@@ -560,7 +653,8 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                         padding: const EdgeInsets.all(20),
                         child: Text(
                           _errorMessage!,
-                          style: const TextStyle(color: Colors.red, fontSize: 16),
+                          style:
+                          const TextStyle(color: Colors.red, fontSize: 16),
                         ),
                       ),
                     )
@@ -628,7 +722,8 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                             ),
                             Text(
                               delivery.vehicleNumber ?? 'N/A',
-                              style: const TextStyle(color: Colors.white, fontSize: 16),
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 16),
                             ),
                           ],
                         ),
@@ -642,7 +737,8 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
                             ),
                             Text(
                               '${_deliveryParts.fold<int>(0, (sum, part) => sum + (part.quantity ?? 0))}',
-                              style: const TextStyle(color: Colors.white, fontSize: 16),
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 16),
                             ),
                           ],
                         ),
@@ -664,7 +760,29 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
               )
             else
               ElevatedButton(
-                onPressed: () => _updateDeliveryStatus('en route'),
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Confirm Start Delivery'),
+                      content: const Text(
+                          'Are you sure you want to start the delivery?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Confirm'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await _updateDeliveryStatus('en route');
+                  }
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF4B97FA),
                   padding: const EdgeInsets.symmetric(vertical: 18),
@@ -688,14 +806,11 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
 
             // Contact Button
             OutlinedButton.icon(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Contact feature coming soon'),
-                    backgroundColor: AppColors.cyellow,
-                  ),
-                );
+              onPressed: () async {
+                launchMyUrl(_url);
               },
+
+
               icon: const Icon(Icons.call, color: Colors.white),
               label: const Text(
                 'Contact',
@@ -720,7 +835,6 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
 
 
   Widget _buildPartRow(DeliveryPart part) {
-    // Fix: Get part details from _partsMap using partId
     final partDetails = _partsMap[part.partId];
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -729,14 +843,16 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
           Expanded(
             flex: 3,
             child: Text(
-              partDetails?.name ?? 'Unknown Part', // Use part.name
+              partDetails?.name ?? 'Unknown Part',
               style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ),
           Expanded(
             flex: 2,
             child: Text(
-              partDetails?.partId ?? 'N/A', // Use part.code
+              (partDetails?.partId.length ?? 0) > 6
+                  ? partDetails!.partId.substring(0, 6).toUpperCase()
+                  : (partDetails?.partId ?? 'N/A').toUpperCase(),
               style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ),
@@ -758,8 +874,11 @@ class _PickedUpPageState extends ConsumerState<PickedUpPage> {
     _deliveryRepository.dispose();
     _userRepository.dispose();
     _deliveryPartRepository.dispose();
-    _partRepository.dispose(); // Dispose PartRepository
+    _partRepository.dispose();
+    _locationRepository.dispose();
     super.dispose();
   }
 }
+
+
 
