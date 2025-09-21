@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../domain/entities/delivery.dart';
@@ -28,6 +27,7 @@ import '../../../data/repositories/location_repository_impl.dart';
 import '../../../data/datasources/local/local_location_database_service.dart';
 import '../../../data/datasources/remote/remote_location_datasource.dart';
 import 'package:greenstem/presentation/screens/profiles/profile_screen.dart';
+import '../../widgets/home/sliding_tab_switcher.dart'; // Add this import
 
 class DeliveryOverviewScreen extends ConsumerStatefulWidget {
   const DeliveryOverviewScreen({super.key});
@@ -37,9 +37,8 @@ class DeliveryOverviewScreen extends ConsumerStatefulWidget {
       _DeliveryOverviewScreenState();
 }
 
-class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen> {
+  // Remove TabController and SingleTickerProviderStateMixin
   late final DeliveryService _deliveryService;
   late final UserService _userService;
   late final DeliveryPartService _deliveryPartService;
@@ -66,10 +65,13 @@ class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen>
   DateTime? _fromDate;
   DateTime? _toDate;
 
+  // Add current tab index
+  int _currentTabIndex = 0;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    // Remove TabController initialization
     _initializeServices();
     _loadCurrentUser();
     _loadDeliveries();
@@ -77,40 +79,51 @@ class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen>
 
   @override
   void dispose() {
-    _tabController.dispose();
+    // Remove TabController disposal
     super.dispose();
   }
 
   void _initializeServices() {
-    final localDeliveryDataSource = LocalDeliveryDatabaseService();
-    final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
-    _deliveryRepository = DeliveryRepositoryImpl(
-        localDeliveryDataSource, remoteDeliveryDataSource);
-    _deliveryService = DeliveryService(_deliveryRepository);
+    // Initialize location services first (needed for DeliveryService)
+    final localLocationDataSource = LocalLocationDatabaseService();
+    final remoteLocationDataSource = SupabaseLocationDataSource();
+    _locationRepository = LocationRepositoryImpl(
+        localLocationDataSource, remoteLocationDataSource);
+    _locationService = LocationService(_locationRepository);
 
-    final localUserDataSource = LocalUserDatabaseService();
-    final remoteUserDataSource = SupabaseUserDataSource();
-    _userRepository =
-        UserRepositoryImpl(localUserDataSource, remoteUserDataSource);
-    _userService = UserService(_userRepository);
-
+    // Initialize delivery part services
     final localDeliveryPartDataSource = LocalDeliveryPartDatabaseService();
     final remoteDeliveryPartDataSource = SupabaseDeliveryPartDataSource();
     _deliveryPartRepository = DeliveryPartRepositoryImpl(
         localDeliveryPartDataSource, remoteDeliveryPartDataSource);
     _deliveryPartService = DeliveryPartService(_deliveryPartRepository);
 
+    // Initialize delivery services with location and delivery part repositories
+    final localDeliveryDataSource = LocalDeliveryDatabaseService();
+    final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
+    _deliveryRepository = DeliveryRepositoryImpl(
+        localDeliveryDataSource, remoteDeliveryDataSource);
+
+    // IMPORTANT: Pass the repositories to DeliveryService like in item_card.dart
+    _deliveryService = DeliveryService(
+      _deliveryRepository,
+      _deliveryPartRepository, // This was missing!
+      _locationRepository, // This was missing!
+    );
+
+    // Initialize user services
+    final localUserDataSource = LocalUserDatabaseService();
+    final remoteUserDataSource = SupabaseUserDataSource();
+    _userRepository =
+        UserRepositoryImpl(localUserDataSource, remoteUserDataSource);
+    _userService = UserService(_userRepository);
+
+    // Initialize part services
     final localPartDataSource = LocalPartDatabaseService();
     final remotePartDataSource = SupabasePartDataSource();
     _partRepository =
         PartRepositoryImpl(localPartDataSource, remotePartDataSource);
     _partService = PartService(_partRepository);
-
-    final localLocationDataSource = LocalLocationDatabaseService();
-    final remoteLocationDataSource = SupabaseLocationDataSource();
-    _locationRepository = LocationRepositoryImpl(
-        localLocationDataSource, remoteLocationDataSource);
-    _locationService = LocationService(_locationRepository);
   }
 
   Future<void> _loadCurrentUser() async {
@@ -477,9 +490,6 @@ class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen>
 
         // Apply search query filter
         bool matchesSearch = _searchQuery.isEmpty ||
-            delivery.deliveryId
-                .toLowerCase()
-                .contains(_searchQuery.toLowerCase()) ||
             delivery.pickupLocation
                     ?.toLowerCase()
                     .contains(_searchQuery.toLowerCase()) ==
@@ -513,7 +523,7 @@ class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen>
         ),
         title: const Text(
           'Delivery Overview',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          style: TextStyle(color: Colors.white, fontSize: 16),
         ),
         actions: [
           if (_currentUser != null)
@@ -590,33 +600,23 @@ class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen>
             ),
           ),
 
-          // Rest of the build method remains the same...
-          // Tab Bar
+          // Replace TabBar with SlidingTabSwitcher
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2A),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              indicator: BoxDecoration(
-                color: const Color(0xFFFEA41D),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              labelColor: Colors.black,
-              unselectedLabelColor: Colors.white,
-              labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-              tabs: const [
-                Tab(text: 'Assigned'),
-                Tab(text: 'Completed'),
-              ],
+            child: SlidingTabSwitcher(
+              tabs: const ['Assigned', 'Completed'],
+              initialIndex: _currentTabIndex,
+              onTabSelected: (index) {
+                setState(() {
+                  _currentTabIndex = index;
+                });
+              },
             ),
           ),
 
           const SizedBox(height: 16),
 
-          // Tab Content
+          // Replace TabBarView with conditional rendering
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -627,13 +627,9 @@ class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen>
                           style: const TextStyle(color: Colors.red),
                         ),
                       )
-                    : TabBarView(
-                        controller: _tabController,
-                        children: [
-                          _buildDeliveryList(_filteredAssignedDeliveries),
-                          _buildDeliveryList(_filteredCompletedDeliveries),
-                        ],
-                      ),
+                    : _currentTabIndex == 0
+                        ? _buildDeliveryList(_filteredAssignedDeliveries)
+                        : _buildDeliveryList(_filteredCompletedDeliveries),
           ),
         ],
       ),
@@ -676,7 +672,7 @@ class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen>
   }
 }
 
-class _DeliveryCard extends StatelessWidget {
+class _DeliveryCard extends StatefulWidget {
   final Delivery delivery;
   final DeliveryService deliveryService;
   final VoidCallback onTap;
@@ -687,30 +683,83 @@ class _DeliveryCard extends StatelessWidget {
     required this.onTap,
   });
 
-  // Get location name by ID
-  Future<String> _getLocationName(String? locationId) async {
-    if (locationId == null || locationId.isEmpty) {
-      return 'Location Name';
-    }
+  @override
+  State<_DeliveryCard> createState() => _DeliveryCardState();
+}
 
+class _DeliveryCardState extends State<_DeliveryCard> {
+  String? _pickupLocationName;
+  String? _deliveryLocationName;
+  String? _distance;
+  int? _itemCount;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
     try {
-      final locationName = await deliveryService.getLocationName(locationId);
-      return locationName ?? 'Location Name';
+      final results = await Future.wait([
+        _getLocationName(widget.delivery.pickupLocation),
+        _getLocationName(widget.delivery.deliveryLocation),
+        _calculateDistance(),
+        _getItemCount(),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _pickupLocationName = results[0] as String;
+          _deliveryLocationName = results[1] as String;
+          _distance = results[2] as String;
+          _itemCount = results[3] as int;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      return 'Location Name';
+      print('Error loading delivery card data: $e');
+      if (mounted) {
+        setState(() {
+          _pickupLocationName = 'Unknown Location';
+          _deliveryLocationName = 'Unknown Location';
+          _distance = 'n/a';
+          _itemCount = 0;
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  // Calculate distance
+  // Get location name by ID - same logic as item_card.dart
+  Future<String> _getLocationName(String? locationId) async {
+    if (locationId == null || locationId.isEmpty) {
+      return 'Unknown Location';
+    }
+
+    try {
+      // Use the same method as item_card.dart
+      final locationName =
+          await widget.deliveryService.getLocationName(locationId);
+      return locationName ?? locationId; // Fallback to ID if name not found
+    } catch (e) {
+      print('Error getting location name for $locationId: $e');
+      return locationId; // Return the ID as fallback
+    }
+  }
+
+  // Calculate distance - same logic as item_card.dart
   Future<String> _calculateDistance() async {
-    if (delivery.pickupLocation == null || delivery.deliveryLocation == null) {
+    if (widget.delivery.pickupLocation == null ||
+        widget.delivery.deliveryLocation == null) {
       return 'n/a';
     }
 
     try {
-      final coordinates = await deliveryService.getDeliveryCoordinates(
-        delivery.pickupLocation!,
-        delivery.deliveryLocation!,
+      final coordinates = await widget.deliveryService.getDeliveryCoordinates(
+        widget.delivery.pickupLocation!,
+        widget.delivery.deliveryLocation!,
       );
 
       final distance = await DistanceCalculator.calculateDistance(
@@ -718,23 +767,26 @@ class _DeliveryCard extends StatelessWidget {
         coordinates['pickupLon'],
         coordinates['deliveryLat'],
         coordinates['deliveryLon'],
-        useApi: false,
+        useApi: false, // Same as item_card.dart
       );
 
       return DistanceCalculator.formatDistance(distance);
     } catch (e) {
+      print('Error calculating distance: $e');
       return 'n/a';
     }
   }
 
-  // Calculate number of items using delivery parts
+  // Get item count - use Stream.first like item_card.dart
   Future<int> _getItemCount() async {
     try {
-      final itemCount = await deliveryService
-          .getNumberOfDeliveryPartsByDeliveryId(delivery.deliveryId)
+      // Use the same method as item_card.dart
+      final itemCount = await widget.deliveryService
+          .getNumberOfDeliveryPartsByDeliveryId(widget.delivery.deliveryId)
           .first;
       return itemCount ?? 0;
     } catch (e) {
+      print('Error getting item count: $e');
       return 0;
     }
   }
@@ -745,7 +797,7 @@ class _DeliveryCard extends StatelessWidget {
   }
 
   Color _getStatusColor() {
-    switch (delivery.status?.toLowerCase()) {
+    switch (widget.delivery.status?.toLowerCase()) {
       case 'awaiting':
         return const Color(0xFFFEA41D);
       case 'picked up':
@@ -762,7 +814,7 @@ class _DeliveryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(16),
@@ -791,15 +843,15 @@ class _DeliveryCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      const Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
+                          Text(
                             'From',
                             style:
                                 TextStyle(color: Colors.white54, fontSize: 12),
                           ),
-                          const Text(
+                          Text(
                             'To',
                             style:
                                 TextStyle(color: Colors.white54, fontSize: 12),
@@ -811,39 +863,58 @@ class _DeliveryCard extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
-                            child: FutureBuilder<String>(
-                              future: _getLocationName(delivery.pickupLocation),
-                              builder: (context, snapshot) {
-                                return Text(
-                                  snapshot.data ?? 'Loading...',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 16,
+                                    width: 60,
+                                    child: Center(
+                                      child: SizedBox(
+                                        width: 12,
+                                        height: 12,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white54,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : Text(
+                                    _pickupLocationName ?? 'Loading...',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14, // Match item_card.dart
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
-                                );
-                              },
-                            ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: FutureBuilder<String>(
-                              future:
-                                  _getLocationName(delivery.deliveryLocation),
-                              builder: (context, snapshot) {
-                                return Text(
-                                  snapshot.data ?? 'Loading...',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 16,
+                                    width: 60,
+                                    child: Center(
+                                      child: SizedBox(
+                                        width: 12,
+                                        height: 12,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white54,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : Text(
+                                    _deliveryLocationName ?? 'Loading...',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14, // Match item_card.dart
+                                    ),
+                                    textAlign: TextAlign.right,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  textAlign: TextAlign.right,
-                                  overflow: TextOverflow.ellipsis,
-                                );
-                              },
-                            ),
                           ),
                         ],
                       ),
@@ -868,7 +939,7 @@ class _DeliveryCard extends StatelessWidget {
                     border: Border.all(color: _getStatusColor(), width: 1),
                   ),
                   child: Text(
-                    delivery.status ?? 'Unknown',
+                    widget.delivery.status ?? 'Unknown',
                     style: TextStyle(
                       color: _getStatusColor(),
                       fontSize: 12,
@@ -878,7 +949,7 @@ class _DeliveryCard extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  'Due ${_formatTime(delivery.dueDatetime)}',
+                  'Due ${_formatTime(widget.delivery.dueDatetime)}',
                   style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
               ],
@@ -889,30 +960,38 @@ class _DeliveryCard extends StatelessWidget {
                 const Icon(Icons.inventory_2_outlined,
                     color: Colors.white54, size: 16),
                 const SizedBox(width: 4),
-                FutureBuilder<int>(
-                  future: _getItemCount(),
-                  builder: (context, snapshot) {
-                    return Text(
-                      '${snapshot.data ?? 2} items',
-                      style:
-                          const TextStyle(color: Colors.white54, fontSize: 12),
-                    );
-                  },
-                ),
+                _isLoading
+                    ? const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white54,
+                        ),
+                      )
+                    : Text(
+                        '${_itemCount ?? 0} items',
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 12),
+                      ),
                 const SizedBox(width: 16),
                 const Icon(Icons.location_on_outlined,
                     color: Colors.white54, size: 16),
                 const SizedBox(width: 4),
-                FutureBuilder<String>(
-                  future: _calculateDistance(),
-                  builder: (context, snapshot) {
-                    return Text(
-                      snapshot.data ?? 'calculating...',
-                      style:
-                          const TextStyle(color: Colors.white54, fontSize: 12),
-                    );
-                  },
-                ),
+                _isLoading
+                    ? const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white54,
+                        ),
+                      )
+                    : Text(
+                        _distance ?? 'n/a',
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 12),
+                      ),
               ],
             ),
           ],
