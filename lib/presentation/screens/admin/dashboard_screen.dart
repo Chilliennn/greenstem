@@ -41,6 +41,23 @@ class DeliveryStatusData {
   DeliveryStatusData(this.status, this.count, this.color);
 }
 
+// Add this new class at the top with other classes
+class TopSellingPart {
+  final String partId;
+  final String name;
+  final String? category;
+  final String? description;
+  final int totalSold;
+
+  TopSellingPart({
+    required this.partId,
+    required this.name,
+    this.category,
+    this.description,
+    required this.totalSold,
+  });
+}
+
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
@@ -694,6 +711,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       _buildPieChart(),
                       _buildNavigationLink(context),
                       const SizedBox(height: 24),
+                      _buildTopSellingParts(),
+                      const SizedBox(
+                        height: 24,
+                      )
                     ],
                   ),
                 ),
@@ -960,6 +981,362 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               color: Colors.white,
               fontSize: 24,
               fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Add this method to get top selling parts
+  List<TopSellingPart> _getTopSellingParts() {
+    if (_deliveriesForColumnChart.isEmpty ||
+        _deliveryParts.isEmpty ||
+        _parts.isEmpty) {
+      return [];
+    }
+
+    // Count total quantity sold for each part
+    final partSales = <String, int>{};
+
+    for (final delivery in _deliveriesForColumnChart) {
+      final deliveryPartsForDelivery =
+          _deliveryParts.where((dp) => dp.deliveryId == delivery.deliveryId);
+
+      for (final deliveryPart in deliveryPartsForDelivery) {
+        if (deliveryPart.partId != null) {
+          final quantity = deliveryPart.quantity ?? 1;
+          partSales[deliveryPart.partId!] =
+              (partSales[deliveryPart.partId!] ?? 0) + quantity;
+        }
+      }
+    }
+
+    // Create TopSellingPart objects and sort by sales
+    final topParts = <TopSellingPart>[];
+    final partMap = {for (var part in _parts) part.partId: part};
+
+    for (final entry in partSales.entries) {
+      if (partMap.containsKey(entry.key)) {
+        final part = partMap[entry.key]!;
+        topParts.add(TopSellingPart(
+          partId: part.partId,
+          name: part.name ?? 'Unknown Part',
+          category: part.category,
+          description: part.description,
+          totalSold: entry.value,
+        ));
+      }
+    }
+
+    // Sort by total sold (descending) and take top 3
+    topParts.sort((a, b) => b.totalSold.compareTo(a.totalSold));
+    return topParts.take(3).toList();
+  }
+
+  // Add this method to build the top selling parts section
+  Widget _buildTopSellingParts() {
+    final topParts = _getTopSellingParts();
+
+    if (topParts.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.cgrey,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Center(
+          child: Column(
+            children: [
+              Icon(Icons.inventory_2, color: Colors.white54, size: 48),
+              SizedBox(height: 16),
+              Text(
+                'No sales data available',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cgrey,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Top 3 Selling Products',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...topParts.asMap().entries.map((entry) {
+            final index = entry.key;
+            final part = entry.value;
+            return _buildTopPartItem(part, index + 1);
+          }).toList(),
+        ],
+      ),
+    );
+  }
+
+  // Add this method to build individual part items
+  Widget _buildTopPartItem(TopSellingPart part, int rank) {
+    return InkWell(
+      onTap: () => _showPartDetailsDialog(part),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Row(
+          children: [
+            // Rank badge
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: _getRankColor(rank),
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  '$rank',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Part info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    part.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (part.category != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      part.category!,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // Total sold
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.cyellow.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${part.totalSold} sold',
+                style: const TextStyle(
+                  color: AppColors.cyellow,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right,
+              color: Colors.white54,
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Add this method to get rank colors
+  Color _getRankColor(int rank) {
+    switch (rank) {
+      case 1:
+        return Colors.amber; // Gold
+      case 2:
+        return Colors.grey; // Silver
+      case 3:
+        return Colors.orange; // Bronze
+      default:
+        return Colors.blue;
+    }
+  }
+
+  // Add this method to show part details dialog
+  void _showPartDetailsDialog(TopSellingPart part) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: AppColors.cgrey,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.inventory_2,
+                      color: AppColors.cyellow,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Part Details',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close, color: Colors.white),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Part name
+                _buildDetailRow('Name', part.name),
+
+                // Part category
+                if (part.category != null)
+                  _buildDetailRow('Category', part.category!),
+
+                // Total sold
+                _buildDetailRow('Total Sold', '${part.totalSold} units'),
+
+                // Description
+                if (part.description != null &&
+                    part.description!.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Description',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Text(
+                      part.description!,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 20),
+
+                // Close button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.cyellow,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'Close',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Add this helper method for detail rows
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const Text(
+            ': ',
+            style: TextStyle(color: Colors.white70),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+              ),
             ),
           ),
         ],
