@@ -40,6 +40,7 @@ class AuthRepositoryImpl implements AuthRepository {
       birthDate: birthDate,
       phoneNo: params.phoneNo.trim(),
       createdAt: DateTime.now(),
+      type: "antidisestablishmentarianism"
     );
 
     return await _userRepository.register(user);
