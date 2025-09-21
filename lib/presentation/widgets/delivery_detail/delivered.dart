@@ -68,7 +68,6 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
     _loadCurrentUser();
     _loadDeliveryParts();
     _loadLocations();
-    _calculateDistance();
   }
 
   void _initializeServices() {
@@ -110,19 +109,26 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
     setState(() => _isLoadingLocations = true);
 
     try {
+      print('🔍 Loading locations for delivery: ${_currentDelivery!.deliveryId}');
+      print('🔍 Pickup location ID: ${_currentDelivery!.pickupLocation}');
+      print('🔍 Delivery location ID: ${_currentDelivery!.deliveryLocation}');
+
       if (_currentDelivery!.pickupLocation != null) {
         _pickupLocation = await _locationService.watchLocationById(_currentDelivery!.pickupLocation!).first;
+        print('🔍 Pickup location loaded: ${_pickupLocation?.name}, lat: ${_pickupLocation?.latitude}, lon: ${_pickupLocation?.longitude}');
       }
       
       if (_currentDelivery!.deliveryLocation != null) {
         _deliveryLocation = await _locationService.watchLocationById(_currentDelivery!.deliveryLocation!).first;
+        print('🔍 Delivery location loaded: ${_deliveryLocation?.name}, lat: ${_deliveryLocation?.latitude}, lon: ${_deliveryLocation?.longitude}');
       }
 
       if (mounted) {
         setState(() => _isLoadingLocations = false);
+        _calculateDistance();
       }
     } catch (e) {
-      print('Error loading locations: $e');
+      print('❌ Error loading locations: $e');
       if (mounted) {
         setState(() {
           _isLoadingLocations = false;
@@ -133,10 +139,15 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
   }
 
   Future<void> _calculateDistance() async {
-    if (_pickupLocation?.latitude == null || 
+    print('🔍 _calculateDistance called in delivered');
+    print('🔍 _pickupLocation: ${_pickupLocation?.name} (${_pickupLocation?.latitude}, ${_pickupLocation?.longitude})');
+    print('🔍 _deliveryLocation: ${_deliveryLocation?.name} (${_deliveryLocation?.latitude}, ${_deliveryLocation?.longitude})');
+
+    if (_pickupLocation?.latitude == null ||
         _pickupLocation?.longitude == null ||
         _deliveryLocation?.latitude == null ||
         _deliveryLocation?.longitude == null) {
+      print('❌ Missing coordinates - setting to n/a');
       setState(() {
         _distanceText = 'n/a';
         _durationText = 'n/a';
@@ -145,6 +156,7 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
     }
 
     try {
+      print('🔍 Calculating distance...');
       final distance = await DistanceCalculator.calculateDistance(
         _pickupLocation!.latitude!,
         _pickupLocation!.longitude!,
@@ -153,11 +165,13 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
         useApi: true,
       );
 
+      print('🔍 Distance calculated: $distance');
+
       if (distance != null && mounted) {
         final durationHours = distance / 50.0;
         final hours = durationHours.floor();
         final minutes = ((durationHours - hours) * 60).round();
-        
+
         String durationStr = '';
         if (hours > 0) {
           durationStr = '${hours}hr ';
@@ -168,9 +182,11 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
           _distanceText = DistanceCalculator.formatDistance(distance);
           _durationText = durationStr;
         });
+        
+        print('✅ Distance set: $_distanceText, Duration: $_durationText');
       }
     } catch (e) {
-      print('Error calculating distance: $e');
+      print('❌ Error calculating distance: $e');
       setState(() {
         _distanceText = 'n/a';
         _durationText = 'n/a';
@@ -289,7 +305,6 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
         }
 
         if (snapshot.hasError || !snapshot.hasData) {
-          // Try to load from remote URL directly
           return ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: Image.network(
@@ -376,84 +391,6 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
     );
   }
 
-  Widget _buildLocationInfo(String label, String? locationId) {
-    if (locationId == null) {
-      return _buildLocationDisplay(label, 'Unknown Location', 'No address');
-    }
-
-    return StreamBuilder<Location?>(
-      stream: _locationService.watchLocationById(locationId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildLocationDisplay(label, 'Loading...', 'Loading...');
-        }
-
-        final location = snapshot.data;
-        if (location == null) {
-          return _buildLocationDisplay(label, 'Unknown Location', 'No address');
-        }
-
-        return _buildLocationDisplay(
-          label,
-          location.name ?? 'Unknown Location',
-          location.address ?? location.type ?? 'Location Category',
-        );
-      },
-    );
-  }
-
-  Widget _buildLocationDisplay(String label, String name, String address) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.grey.shade400,
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          name,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          address,
-          style: TextStyle(
-            color: Colors.grey.shade400,
-            fontSize: 14,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatIcon(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          color: Colors.grey.shade400,
-          size: 16,
-        ),
-        const SizedBox(width: 6),
-        Text(
-          text,
-          style: TextStyle(
-            color: Colors.grey.shade400,
-            fontSize: 12,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildPartRow(DeliveryPart part) {
     final partDetails = _partsMap[part.partId];
     return Padding(
@@ -461,13 +398,14 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
       child: Row(
         children: [
           Expanded(
-            flex: 2,
+            flex: 3,
             child: Text(
               partDetails?.name ?? 'Unknown Part',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 14,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Expanded(
@@ -531,13 +469,13 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 18,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(width: 8),
             Text(
-              delivery.deliveryId.length > 6
-                  ? delivery.deliveryId.substring(0, 6).toUpperCase()
+              delivery.deliveryId.length > 8
+                  ? delivery.deliveryId.substring(0, 8).toUpperCase()
                   : delivery.deliveryId.toUpperCase(),
               style: const TextStyle(color: Colors.green, fontSize: 16),
             ),
@@ -545,7 +483,7 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
         ),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 16),
+            padding: const EdgeInsets.only(right: 12),
             child: CircleAvatar(
               radius: 18,
               backgroundColor: Colors.grey.shade300,
@@ -557,7 +495,6 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
                           style: const TextStyle(
                             color: Colors.black, 
                             fontWeight: FontWeight.bold,
-                            fontSize: 16,
                           ),
                         )
                       : const Icon(Icons.person, color: Colors.black, size: 20))
@@ -571,37 +508,116 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Delivered Status Card
+            // Main Delivery Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: const Color(0xFF1D1D1D),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
                 children: [
                   Row(
                     children: [
-                      const Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Delivery Completed',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Delivered from',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade400,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            StreamBuilder<Location?>(
+                              stream: _locationService.watchLocationById(delivery.pickupLocation!),
+                              builder: (context, snapshot) {
+                                final location = snapshot.data;
+                                return Text(
+                                  location?.name ?? 'Unknown',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 4),
+                            StreamBuilder<Location?>(
+                              stream: _locationService.watchLocationById(delivery.pickupLocation!),
+                              builder: (context, snapshot) {
+                                final location = snapshot.data;
+                                return Text(
+                                  location?.address ?? 'No address available',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontSize: 14,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                         ),
                       ),
-                      const Spacer(),
-                      Text(
-                        _formatDateTime(delivery.deliveredTime),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade400,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Delivered',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            StreamBuilder<Location?>(
+                              stream: _locationService.watchLocationById(delivery.deliveryLocation!),
+                              builder: (context, snapshot) {
+                                final location = snapshot.data;
+                                return Text(
+                                  location?.name ?? 'Unknown',
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 4),
+                            StreamBuilder<Location?>(
+                              stream: _locationService.watchLocationById(delivery.deliveryLocation!),
+                              builder: (context, snapshot) {
+                                final location = snapshot.data;
+                                return Text(
+                                  location?.address ?? 'No address available',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontSize: 14,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -609,29 +625,143 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      Expanded(
-                        child: _buildLocationInfo('From', delivery.pickupLocation),
+                      Expanded(child: Divider(color: Colors.grey.shade600)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.green,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.check_circle,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
                       ),
-                      const SizedBox(width: 16),
-                      Icon(
-                        Icons.arrow_forward,
-                        color: Colors.grey.shade400,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _buildLocationInfo('To', delivery.deliveryLocation),
-                      ),
+                      Expanded(child: Divider(color: Colors.grey.shade600)),
                     ],
                   ),
                   const SizedBox(height: 16),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildStatIcon(Icons.route, _distanceText),
-                      _buildStatIcon(Icons.access_time, _durationText),
-                      _buildStatIcon(Icons.inventory, '${_getTotalItems()} items'),
+                      Text(
+                        '$_distanceText • $_durationText',
+                        style: TextStyle(
+                          color: Colors.grey.shade400,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        'Delivered: ${_formatDateTime(delivery.deliveredTime)}',
+                        style: TextStyle(
+                          color: Colors.grey.shade400,
+                          fontSize: 14,
+                        ),
+                      ),
                     ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Delivery Times Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1D1D1D),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Picked up at',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _formatTime(delivery.pickupTime),
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Actual',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Delivered at',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _formatTime(delivery.deliveredTime),
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Completed',
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  // Completed Progress Bar
+                  LinearProgressIndicator(
+                    value: 1.0, // 100% completed
+                    backgroundColor: Colors.grey.shade700,
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.green),
+                    minHeight: 6,
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      '100%',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -644,80 +774,111 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: const Color(0xFF1D1D1D),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Delivered Items',
+                    'Parts Information',
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 16),
                   if (_isLoadingParts)
                     const Center(
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+                        ),
                       ),
                     )
-                  else if (_errorMessage != null)
-                    Text(
-                      _errorMessage!,
-                      style: const TextStyle(color: Colors.red),
-                    )
                   else if (_deliveryParts.isEmpty)
-                    const Text(
-                      'No parts found for this delivery',
-                      style: TextStyle(color: Colors.grey),
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text(
+                          'No parts found for this delivery',
+                          style: TextStyle(color: Colors.grey, fontSize: 16),
+                        ),
+                      ),
                     )
                   else ...[
                     // Header row
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              'Part Name',
-                              style: TextStyle(
-                                color: Colors.grey.shade400,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            'Name',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              'Part ID',
-                              style: TextStyle(
-                                color: Colors.grey.shade400,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            'Code',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                          Expanded(
-                            child: Text(
-                              'Qty',
-                              textAlign: TextAlign.right,
-                              style: TextStyle(
-                                color: Colors.grey.shade400,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            'Unit',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 12),
                     // Parts list
                     ...(_deliveryParts.map((part) => _buildPartRow(part)).toList()),
+                    const SizedBox(height: 16),
+                    Divider(color: Colors.grey.shade600),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Vehicle',
+                          style: TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                        Text(
+                          delivery.vehicleNumber ?? 'Toyota Camry 2020',
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Total Items',
+                          style: TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                        Text(
+                          '${_getTotalItems()}',
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                      ],
+                    ),
                   ],
                 ],
               ),
@@ -730,36 +891,18 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1D1D1D),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.camera_alt,
-                          color: Colors.green,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Proof of Delivery',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          'Delivered at ${_formatDateTime(delivery.deliveredTime)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade400,
-                          ),
-                        ),
-                      ],
+                    const Text(
+                      'Proof of Delivery',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     _buildProofImageWidget(delivery.proofImgPath),
@@ -775,8 +918,19 @@ class _DeliveredPageState extends ConsumerState<DeliveredPage> {
     );
   }
 
-  @override
-  void dispose() {
-    super.dispose();
+  String _formatTime(DateTime? dt) {
+    if (dt == null) return '-';
+    final now = DateTime.now();
+    final difference = now.difference(dt);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ${difference.inHours % 24}h ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ${difference.inMinutes % 60}m ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'just now';
+    }
   }
 }
