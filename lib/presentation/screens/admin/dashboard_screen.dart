@@ -22,6 +22,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../auth/sign_in_screen.dart';
 import '../profiles/profile_screen.dart';
+import '../admin/delivery_overview_screen.dart';
 
 class StackedColumnData {
   final String period;
@@ -80,7 +81,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
       final deliveryRepository = DeliveryRepositoryImpl(
           localDeliveryDataSource, remoteDeliveryDataSource);
-      
+
       // Pass the repository, not the service
       _deliveryService = DeliveryService(
         deliveryRepository,
@@ -90,8 +91,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       // Initialize part repository and service
       final localPartDataSource = LocalPartDatabaseService();
       final remotePartDataSource = SupabasePartDataSource();
-      final partRepository = PartRepositoryImpl(
-          localPartDataSource, remotePartDataSource);
+      final partRepository =
+          PartRepositoryImpl(localPartDataSource, remotePartDataSource);
       _partService = PartService(partRepository);
 
       print('✅ Services initialized successfully');
@@ -311,7 +312,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   ImageProvider? _getProfileImage() {
     final authState = ref.read(authProvider);
     final user = authState.user;
-    
+
     if (user?.profilePath == null || user!.profilePath!.isEmpty) {
       return null;
     }
@@ -333,10 +334,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   // Add this new method to get pie chart data
   List<DeliveryStatusData> _getPieChartData() {
     // Get all non-delivered deliveries
-    final nonDeliveredDeliveries = _deliveries.where((d) => 
-      d.status?.toLowerCase() != 'delivered' && 
-      d.status?.toLowerCase() != 'cancelled'
-    ).toList();
+    final nonDeliveredDeliveries = _deliveries
+        .where((d) =>
+            d.status?.toLowerCase() != 'delivered' &&
+            d.status?.toLowerCase() != 'cancelled')
+        .toList();
 
     if (nonDeliveredDeliveries.isEmpty) {
       return [];
@@ -365,12 +367,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final pieData = <DeliveryStatusData>[];
     for (final entry in statusCounts.entries) {
       final normalizedStatus = entry.key.replaceAll('_', ' ');
-      final displayStatus = normalizedStatus.split(' ')
-          .map((word) => word.isNotEmpty 
+      final displayStatus = normalizedStatus
+          .split(' ')
+          .map((word) => word.isNotEmpty
               ? word[0].toUpperCase() + word.substring(1).toLowerCase()
               : word)
           .join(' ');
-      
+
       pieData.add(DeliveryStatusData(
         displayStatus,
         entry.value,
@@ -378,14 +381,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ));
     }
 
-    print('📊 Pie chart data: ${pieData.map((d) => '${d.status}: ${d.count}').join(', ')}');
+    print(
+        '📊 Pie chart data: ${pieData.map((d) => '${d.status}: ${d.count}').join(', ')}');
     return pieData;
   }
 
   // Add this method to build the pie chart
   Widget _buildPieChart() {
     final pieData = _getPieChartData();
-    
+
     if (pieData.isEmpty) {
       return Container(
         height: 300,
@@ -484,9 +488,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _buildStatusSummaryCards() {
     final pieData = _getPieChartData();
     final totalPending = pieData.fold(0, (sum, data) => sum + data.count);
-    final totalDelivered = _deliveries.where((d) => d.status?.toLowerCase() == 'delivered').length;
+    final totalDelivered =
+        _deliveries.where((d) => d.status?.toLowerCase() == 'delivered').length;
     final totalDeliveries = _deliveries.length;
-    final completionRate = totalDeliveries > 0 ? (totalDelivered / totalDeliveries * 100) : 0.0;
+    final completionRate =
+        totalDeliveries > 0 ? (totalDelivered / totalDeliveries * 100) : 0.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -503,51 +509,38 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         Row(
           children: [
             Expanded(
-              child: _buildStatusCard(
-                'Total Deliveries', 
-                totalDeliveries.toString(), 
-                Icons.local_shipping, 
-                Colors.blue
-              )
-            ),
+                child: _buildStatusCard(
+                    'Total Deliveries',
+                    totalDeliveries.toString(),
+                    Icons.local_shipping,
+                    Colors.blue)),
             const SizedBox(width: 16),
             Expanded(
-              child: _buildStatusCard(
-                'Completed', 
-                totalDelivered.toString(), 
-                Icons.check_circle, 
-                Colors.green
-              )
-            ),
+                child: _buildStatusCard('Completed', totalDelivered.toString(),
+                    Icons.check_circle, Colors.green)),
           ],
         ),
         const SizedBox(height: 16),
         Row(
           children: [
             Expanded(
-              child: _buildStatusCard(
-                'Pending', 
-                totalPending.toString(), 
-                Icons.pending_actions, 
-                Colors.orange
-              )
-            ),
+                child: _buildStatusCard('Pending', totalPending.toString(),
+                    Icons.pending_actions, Colors.orange)),
             const SizedBox(width: 16),
             Expanded(
-              child: _buildStatusCard(
-                'Completion Rate', 
-                '${completionRate.toStringAsFixed(1)}%', 
-                Icons.trending_up, 
-                Colors.purple
-              )
-            ),
+                child: _buildStatusCard(
+                    'Completion Rate',
+                    '${completionRate.toStringAsFixed(1)}%',
+                    Icons.trending_up,
+                    Colors.purple)),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildStatusCard(String title, String value, IconData icon, Color iconColor) {
+  Widget _buildStatusCard(
+      String title, String value, IconData icon, Color iconColor) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -583,6 +576,44 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDeliveryOverviewButton() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ElevatedButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const DeliveryOverviewScreen(),
+            ),
+          );
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFFFEA41D),
+          foregroundColor: Colors.black,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.local_shipping, size: 20),
+            SizedBox(width: 8),
+            Text(
+              'View Delivery Overview',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -688,7 +719,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       _buildChart(),
                       const SizedBox(height: 24),
                       _buildStatsCards(),
-                      
+
                       // NEW PIE CHART SECTION
                       const SizedBox(height: 32),
                       _buildPieChart(),
@@ -880,6 +911,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     Colors.purple)),
           ],
         ),
+        const SizedBox(height: 24),
+        _buildDeliveryOverviewButton(),
+        const SizedBox(height: 24),
       ],
     );
   }
