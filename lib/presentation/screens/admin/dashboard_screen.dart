@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:greenstem/presentation/screens/admin/delivery_overview_screen.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:greenstem/data/datasources/local/local_delivery_database_service.dart';
 import 'package:greenstem/data/datasources/local/local_delivery_part_database_service.dart';
@@ -49,7 +50,8 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _isMonthlyView = true;
-  List<Delivery> _deliveries = [];
+  List<Delivery> _deliveriesForColumnChart = [];
+  List<Delivery> _deliveriesForPieChart = [];
   List<DeliveryPart> _deliveryParts = [];
   List<Part> _parts = [];
   bool _isLoading = true;
@@ -80,7 +82,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
       final deliveryRepository = DeliveryRepositoryImpl(
           localDeliveryDataSource, remoteDeliveryDataSource);
-      
+
       // Pass the repository, not the service
       _deliveryService = DeliveryService(
         deliveryRepository,
@@ -90,13 +92,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       // Initialize part repository and service
       final localPartDataSource = LocalPartDatabaseService();
       final remotePartDataSource = SupabasePartDataSource();
-      final partRepository = PartRepositoryImpl(
-          localPartDataSource, remotePartDataSource);
+      final partRepository =
+          PartRepositoryImpl(localPartDataSource, remotePartDataSource);
       _partService = PartService(partRepository);
 
-      print('✅ Services initialized successfully');
+      print('Services initialized successfully');
     } catch (e) {
-      print('❌ Error initializing services: $e');
+      print('Error initializing services: $e');
       setState(() {
         _errorMessage = 'Failed to initialize services: $e';
         _isLoading = false;
@@ -112,21 +114,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     try {
       // Load all required data
-      final deliveries = await _deliveryService.watchAllDeliveries().first;
+      final allDeliveries = await _deliveryService.watchAllDeliveries().first;
       final deliveryParts =
           await _deliveryPartService.watchAllDeliveryParts().first;
       final parts = await _partService.watchAllParts().first;
 
       setState(() {
-        _deliveries = deliveries
+        // For column chart: only delivered deliveries
+        _deliveriesForColumnChart = allDeliveries
             .where((d) => d.status?.toLowerCase() == 'delivered')
             .toList();
+
+        // For pie chart: all deliveries (will be filtered in _getPieChartData)
+        _deliveriesForPieChart = allDeliveries;
+
         _deliveryParts = deliveryParts;
         _parts = parts;
         _isLoading = false;
       });
 
-      print('📊 Loaded ${_deliveries.length} delivered orders');
+      print(
+          '📊 Loaded ${_deliveriesForColumnChart.length} delivered orders for column chart');
+      print(
+          '📊 Loaded ${_deliveriesForPieChart.length} total deliveries for pie chart');
       print('📊 Loaded ${_deliveryParts.length} delivery parts');
       print('📊 Loaded ${_parts.length} parts');
     } catch (e) {
@@ -139,9 +149,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   List<StackedColumnData> _getChartData() {
-    if (_deliveries.isEmpty || _deliveryParts.isEmpty || _parts.isEmpty) {
+    if (_deliveriesForColumnChart.isEmpty ||
+        _deliveriesForPieChart.isEmpty ||
+        _deliveryParts.isEmpty ||
+        _parts.isEmpty) {
       print(
-          '⚠️ Missing data for chart: deliveries=${_deliveries.length}, parts=${_deliveryParts.length}, allParts=${_parts.length}');
+          'Missing data for chart: deliveriesForColumnChart=${_deliveriesForColumnChart.length}, deliveriesForPieChart=${_deliveriesForPieChart.length}, parts=${_deliveryParts.length}, allParts=${_parts.length}');
       return [];
     }
 
@@ -158,7 +171,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         final periodKey = '${_getMonthName(date.month)} ${date.year}';
 
         // Get deliveries for this month
-        final monthDeliveries = _deliveries.where((delivery) {
+        final monthDeliveries = _deliveriesForColumnChart.where((delivery) {
           if (delivery.deliveredTime == null) return false;
           final deliveredDate = delivery.deliveredTime!;
           return deliveredDate.year == date.year &&
@@ -198,7 +211,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         final periodKey = year.toString();
 
         // Get deliveries for this year
-        final yearDeliveries = _deliveries.where((delivery) {
+        final yearDeliveries = _deliveriesForColumnChart.where((delivery) {
           if (delivery.deliveredTime == null) return false;
           return delivery.deliveredTime!.year == year;
         });
@@ -231,7 +244,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       }
     }
 
-    print('📈 Generated ${chartData.length} chart data points');
+    print('Generated ${chartData.length} chart data points');
     return chartData;
   }
 
@@ -257,7 +270,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   List<StackedColumnSeries<StackedColumnData, String>> _createSeries() {
     final chartData = _getChartData();
     if (chartData.isEmpty) {
-      print('⚠️ No chart data available');
+      print('No chart data available');
       return [];
     }
 
@@ -272,16 +285,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     // Create color palette
     final colors = [
-      Colors.blue,
-      Colors.red,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.teal,
-      Colors.pink,
-      Colors.indigo,
-      Colors.cyan,
-      Colors.amber,
+      Color(0xFF101010),
+      Color(0xFF2C2C2C),
+      Color(0xFFFEA41D),
     ];
 
     final seriesList = <StackedColumnSeries<StackedColumnData, String>>[];
@@ -303,7 +309,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       colorIndex++;
     }
 
-    print('📊 Created ${seriesList.length} chart series');
+    print('Created ${seriesList.length} chart series');
     return seriesList;
   }
 
@@ -311,7 +317,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   ImageProvider? _getProfileImage() {
     final authState = ref.read(authProvider);
     final user = authState.user;
-    
+
     if (user?.profilePath == null || user!.profilePath!.isEmpty) {
       return null;
     }
@@ -332,11 +338,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   // Add this new method to get pie chart data
   List<DeliveryStatusData> _getPieChartData() {
-    // Get all non-delivered deliveries
-    final nonDeliveredDeliveries = _deliveries.where((d) => 
-      d.status?.toLowerCase() != 'delivered' && 
-      d.status?.toLowerCase() != 'cancelled'
-    ).toList();
+    // Use _deliveriesForPieChart instead of _deliveries
+    final allDeliveries = _deliveriesForPieChart;
+
+    // Define the ONLY statuses we want to show in pie chart
+    final allowedStatuses = {
+      'incoming',
+      'picked_up',
+      'picked up',
+      'en_route',
+      'en route',
+      'awaiting'
+    };
+
+    // Filter deliveries to ONLY include the allowed statuses
+    final nonDeliveredDeliveries = allDeliveries.where((d) {
+      if (d.status == null || d.status!.isEmpty) return false;
+
+      final status = d.status!.toLowerCase().trim();
+
+      // Only include if status is in our allowed list
+      return allowedStatuses.contains(status);
+    }).toList();
+
+    print(
+        '📊 Pie chart filtering: ${allDeliveries.length} total deliveries -> ${nonDeliveredDeliveries.length} pending deliveries');
 
     if (nonDeliveredDeliveries.isEmpty) {
       return [];
@@ -345,47 +371,75 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     // Count deliveries by status
     final statusCounts = <String, int>{};
     for (final delivery in nonDeliveredDeliveries) {
-      final status = delivery.status?.toLowerCase() ?? 'unknown';
-      statusCounts[status] = (statusCounts[status] ?? 0) + 1;
+      final status = delivery.status!.toLowerCase().trim();
+
+      // Normalize status names for consistent grouping
+      String normalizedStatus;
+      switch (status) {
+        case 'picked_up':
+        case 'picked up':
+          normalizedStatus = 'picked_up';
+          break;
+        case 'en_route':
+        case 'en route':
+          normalizedStatus = 'en_route';
+          break;
+        case 'incoming':
+          normalizedStatus = 'incoming';
+          break;
+        case 'awaiting':
+          normalizedStatus = 'awaiting';
+          break;
+        default:
+          // Skip any unexpected statuses
+          print('⚠️ Skipping unexpected status in pie chart: $status');
+          continue;
+      }
+
+      statusCounts[normalizedStatus] =
+          (statusCounts[normalizedStatus] ?? 0) + 1;
     }
 
     // Define colors for each status
     final statusColors = {
-      'awaiting': Colors.orange,
-      'incoming': Colors.blue,
-      'picked_up': Colors.purple,
-      'picked up': Colors.purple,
-      'en_route': Colors.green,
-      'en route': Colors.green,
-      'delivering': Colors.red,
-      'unknown': Colors.grey,
+      'incoming': Color(0xFF101010),
+      'awaiting': Color(0xFFFEA41D),
+      'picked_up': Color(0xFF4B97FA),
+      // Fix: changed from 'picked up' to 'picked_up'
+      'en_route': Color(0xFFC084FC),
+      // Fix: changed from 'en route' to 'en_route'
+    };
+
+    // Define display names for each status
+    final statusDisplayNames = {
+      'awaiting': 'Awaiting',
+      'incoming': 'Incoming',
+      'picked_up': 'Picked Up',
+      'en_route': 'En Route',
     };
 
     // Create pie chart data
     final pieData = <DeliveryStatusData>[];
     for (final entry in statusCounts.entries) {
-      final normalizedStatus = entry.key.replaceAll('_', ' ');
-      final displayStatus = normalizedStatus.split(' ')
-          .map((word) => word.isNotEmpty 
-              ? word[0].toUpperCase() + word.substring(1).toLowerCase()
-              : word)
-          .join(' ');
-      
+      final displayName = statusDisplayNames[entry.key] ?? entry.key;
+      final color = statusColors[entry.key] ?? Colors.grey;
+
       pieData.add(DeliveryStatusData(
-        displayStatus,
+        displayName,
         entry.value,
-        statusColors[entry.key] ?? Colors.grey,
+        color,
       ));
     }
 
-    print('📊 Pie chart data: ${pieData.map((d) => '${d.status}: ${d.count}').join(', ')}');
+    print(
+        '📊 Pie chart data: ${pieData.map((d) => '${d.status}: ${d.count}').join(', ')}');
     return pieData;
   }
 
   // Add this method to build the pie chart
   Widget _buildPieChart() {
     final pieData = _getPieChartData();
-    
+
     if (pieData.isEmpty) {
       return Container(
         height: 300,
@@ -445,7 +499,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 enable: true,
                 color: AppColors.cgrey,
                 textStyle: const TextStyle(color: Colors.white),
-                format: 'point.x: point.y deliveries (point.percentage%)',
+                builder: (dynamic data, dynamic point, dynamic series,
+                    int pointIndex, int seriesIndex) {
+                  final statusData = data as DeliveryStatusData;
+                  final pieData = _getPieChartData();
+                  final total =
+                      pieData.fold(0, (sum, item) => sum + item.count);
+                  final percentage =
+                      ((statusData.count / total) * 100).toStringAsFixed(1);
+                  return Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.cgrey,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: Text(
+                      '${statusData.status}: ${statusData.count} deliveries ($percentage%)',
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  );
+                },
               ),
               series: <PieSeries<DeliveryStatusData, String>>[
                 PieSeries<DeliveryStatusData, String>(
@@ -480,110 +554,36 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  // Add this method to build status summary cards
-  Widget _buildStatusSummaryCards() {
-    final pieData = _getPieChartData();
-    final totalPending = pieData.fold(0, (sum, data) => sum + data.count);
-    final totalDelivered = _deliveries.where((d) => d.status?.toLowerCase() == 'delivered').length;
-    final totalDeliveries = _deliveries.length;
-    final completionRate = totalDeliveries > 0 ? (totalDelivered / totalDeliveries * 100) : 0.0;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildNavigationLink(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end, // align button to the right
       children: [
-        const Text(
-          'Delivery Status Overview',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildStatusCard(
-                'Total Deliveries', 
-                totalDeliveries.toString(), 
-                Icons.local_shipping, 
-                Colors.blue
-              )
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildStatusCard(
-                'Completed', 
-                totalDelivered.toString(), 
-                Icons.check_circle, 
-                Colors.green
-              )
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildStatusCard(
-                'Pending', 
-                totalPending.toString(), 
-                Icons.pending_actions, 
-                Colors.orange
-              )
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildStatusCard(
-                'Completion Rate', 
-                '${completionRate.toStringAsFixed(1)}%', 
-                Icons.trending_up, 
-                Colors.purple
-              )
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatusCard(String title, String value, IconData icon, Color iconColor) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.cgrey,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: iconColor, size: 24),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                  ),
+        TextButton(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const DeliveryOverviewScreen(),
+              ),
+            );
+          },
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Text(
+                'View Detailed Delivery Overview',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  decoration: TextDecoration.underline,
                 ),
               ),
+              SizedBox(width: 4), // spacing between text and icon
+              Icon(Icons.keyboard_arrow_right, color: Colors.white, size: 16),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -688,12 +688,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       _buildChart(),
                       const SizedBox(height: 24),
                       _buildStatsCards(),
-                      
+
                       // NEW PIE CHART SECTION
                       const SizedBox(height: 32),
                       _buildPieChart(),
+                      _buildNavigationLink(context),
                       const SizedBox(height: 24),
-                      _buildStatusSummaryCards(),
                     ],
                   ),
                 ),
@@ -885,6 +885,48 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _buildStatCard(
+      String title, String value, IconData icon, Color iconColor) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cgrey,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: iconColor, size: 24),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Reusable method to build individual status cards
+  Widget _buildStatusCard(
       String title, String value, IconData icon, Color iconColor) {
     return Container(
       padding: const EdgeInsets.all(16),
