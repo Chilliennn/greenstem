@@ -56,6 +56,10 @@ abstract class UserRepository {
   // Local cache operations
   Future<List<User>> getCachedUsers();
 
+  Future<List<User>> getAllUsers();
+
+  Future<User?> getUserById(String userId);
+
   Future<void> clearCache();
 
   Future<void> clearCurrentUser();

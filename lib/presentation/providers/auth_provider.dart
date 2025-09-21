@@ -159,7 +159,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       errorMessage: null,
       clearUser: true,
     );
-
   }
 
   // Get remember me status
@@ -176,16 +175,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
     print('AuthProvider: Initializing auth...');
 
     try {
-      // Check if we have a current user using the correct ref
-      final userService = _ref.read(userServiceProvider);
-      final currentUser = await userService.getCurrentUser();
+      // First check if Remember Me is enabled
+      if (_authStorage != null && _authStorage!.getRememberMe()) {
+        // Check if we have a current user using the correct ref
+        final userService = _ref.read(userServiceProvider);
+        final currentUser = await userService.getCurrentUser();
 
-      if (currentUser != null) {
-        print(
-            'AuthProvider: Found current user: ${currentUser.username}, type: ${currentUser.type}');
-        state = state.copyWith(user: currentUser);
+        if (currentUser != null) {
+          print('AuthProvider: Found current user: ${currentUser.username}, type: ${currentUser.type}');
+          state = state.copyWith(user: currentUser);
+        } else {
+          print('AuthProvider: No current user found');
+        }
       } else {
-        print('AuthProvider: No current user found');
+        print('AuthProvider: Remember Me is disabled, skipping auto-login');
+        // Clear any current user if Remember Me is disabled
+        if (_authStorage != null) {
+          await _authStorage!.clearAuthData();
+        }
+        final userService = _ref.read(userServiceProvider);
+        await userService.clearCurrentUser();
       }
     } catch (e) {
       print('AuthProvider: Error initializing auth: $e');

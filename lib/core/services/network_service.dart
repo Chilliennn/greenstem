@@ -8,24 +8,56 @@ class NetworkService {
   static bool _lastKnownState = false;
   static bool _isDisposed = false;
 
+  // Add caching to avoid repeated network checks
+  static bool? _cachedResult;
+  static DateTime? _lastCheckTime;
+  static const Duration _cacheValidity = Duration(seconds: 10);
+
   static Future<bool> hasConnection() async {
+    // Return cached result if it's still valid
+    if (_cachedResult != null &&
+        _lastCheckTime != null &&
+        DateTime.now().difference(_lastCheckTime!) < _cacheValidity) {
+      return _cachedResult!;
+    }
+
     try {
-      final result = await InternetAddress.lookup('google.com');
-      _lastKnownState = result.isNotEmpty && result[0].rawAddress.isNotEmpty;
-      return _lastKnownState;
-    } on SocketException catch (_) {
+      final result = await InternetAddress.lookup('google.com')
+          .timeout(const Duration(seconds: 15));
+
+      final hasConnection =
+          result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+      _lastKnownState = hasConnection;
+      _cachedResult = hasConnection;
+      _lastCheckTime = DateTime.now();
+      print('🌐 Network check result: $hasConnection');
+      return hasConnection;
+    } on SocketException catch (e) {
+      print('📱 Network check failed: $e');
       _lastKnownState = false;
+      _cachedResult = false;
+      _lastCheckTime = DateTime.now();
+      return false;
+    } on TimeoutException catch (e) {
+      print('⏰ Network check timeout: $e');
+      _lastKnownState = false;
+      _cachedResult = false;
+      _lastCheckTime = DateTime.now();
+      return false;
+    } catch (e) {
+      print('📱 Network check error: $e');
+      _lastKnownState = false;
+      _cachedResult = false;
+      _lastCheckTime = DateTime.now();
       return false;
     }
   }
 
   static Stream<bool> get connectionStream {
     if (_isDisposed) {
-      // Return a stream that immediately closes if service is disposed
       return Stream.empty();
     }
 
-    // Start monitoring if not already started
     _startMonitoring();
     return _controller.stream;
   }
@@ -33,7 +65,7 @@ class NetworkService {
   static void _startMonitoring() {
     if (_timer?.isActive == true || _isDisposed) return;
 
-    _timer = Timer.periodic(const Duration(seconds: 10), (_) async {
+    _timer = Timer.periodic(const Duration(seconds: 15), (_) async {
       if (_isDisposed) {
         _timer?.cancel();
         return;
@@ -62,7 +94,7 @@ class NetworkService {
 
   static void reset() {
     _isDisposed = false;
-    // Note: Don't recreate the controller here as it might cause issues
-    // The app should be restarted if NetworkService needs to be reset
+    _cachedResult = null;
+    _lastCheckTime = null;
   }
 }
