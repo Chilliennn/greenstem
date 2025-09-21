@@ -13,6 +13,8 @@ class User {
   final DateTime? updatedAt;
   final int avatarVersion;
   final String type;
+  final bool isSynced;
+  final bool needsSync;
 
   const User({
     required this.userId,
@@ -29,6 +31,8 @@ class User {
     this.updatedAt,
     this.avatarVersion = 0,
     this.type = "antidisestablishmentarianism",
+    this.isSynced = false,
+    this.needsSync = true,
   });
 
   User copyWith({
@@ -46,6 +50,8 @@ class User {
     DateTime? updatedAt,
     int? avatarVersion,
     String? type,
+    bool? isSynced,
+    bool? needsSync,
   }) {
     return User(
       userId: userId ?? this.userId,
@@ -62,6 +68,8 @@ class User {
       updatedAt: updatedAt ?? this.updatedAt,
       avatarVersion: avatarVersion ?? this.avatarVersion,
       type: type ?? this.type,
+      isSynced: isSynced ?? this.isSynced,
+      needsSync: needsSync ?? this.needsSync,
     );
   }
 

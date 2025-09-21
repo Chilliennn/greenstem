@@ -1,0 +1,238 @@
+当前问题：
+离线时无法上传图片，因为 ImageUploadService.updateProfileImage() 总是尝试上传到 Supabase Storage
+如果网络连接失败，整个上传过程就会失败
+离线优先的需求：
+离线时：
+图片应该能够保存到本地缓存
+用户应该能看到图片更新（从本地缓存显示）
+数据库中的 profile_path 应该存储一个本地路径标识符
+avatar_version 应该递增
+恢复网络后：
+应该自动检测到有未同步的本地图片
+自动上传到 Supabase Storage
+更新数据库中的 profile_path 为远程 URL
+保持 avatar_version 不变（避免版本冲突）
+关键考虑点：
+1. 本地路径标识符：
+需要一种方式区分本地路径和远程 URL
+例如：local://user123_avatar_v2.jpg vs https://supabase...
+2. 同步机制：
+需要检测哪些图片是本地保存但未同步的
+可能需要在用户表中添加 needs_sync 字段来标记图片需要同步
+3. 冲突处理：
+如果用户离线时上传了图片，然后在线时又上传了另一张
+需要决定哪个版本是"最新"的
+可能需要基于时间戳或版本号来决定
+4. 用户体验：
+离线时上传应该显示成功消息
+恢复网络后应该有某种指示器显示同步状态
+用户应该知道图片何时从本地切换到远程
+恢复网络后的行为：
+自动检测：
+检查是否有 profile_path 以 local:// 开头的用户
+或者检查 needs_sync 标志
+上传流程：
+读取本地缓存的图片文件
+上传到 Supabase Storage
+更新数据库中的 profile_path 为远程 URL
+清除 needs_sync 标志
+错误处理：
+如果上传失败，保持本地路径
+重试机制（可能延迟重试）
+用户通知（可选）
+
+版本冲突处理的需求分析
+核心原则：Last-Write-Wins (LWW)
+版本号高的总是获胜
+无论是本地还是远程的版本
+恢复网络后的同步逻辑：
+情况1：本地版本更高
+本地: avatar_version = 5, profile_path = "local://user123_avatar_v5.jpg"
+远程: avatar_version = 3, profile_path = "https://supabase.../user123_avatar_v3.jpg"
+处理：
+上传本地图片到 Supabase Storage
+更新远程数据库：avatar_version = 5, profile_path = "新的远程URL"
+本地数据库保持同步状态
+情况2：远程版本更高
+本地: avatar_version = 3, profile_path = "local://user123_avatar_v3.jpg"  
+远程: avatar_version = 5, profile_path = "https://supabase.../user123_avatar_v5.jpg"
+处理：
+下载远程图片到本地缓存
+更新本地数据库：avatar_version = 5, profile_path = "远程URL"
+删除本地的旧版本图片
+情况3：版本相同
+本地: avatar_version = 4, profile_path = "local://user123_avatar_v4.jpg"
+远程: avatar_version = 4, profile_path = "https://supabase.../user123_avatar_v4.jpg"
+处理：
+或者保持远程版本（因为已经同步过了）
+
+
+1. 并发修改问题
+问题场景：
+用户在同步过程中（正在上传本地图片到远程）又修改了头像
+解决方案：
+方案A：同步锁机制
+class ImageSyncService {
+  static final Map<String, bool> _syncInProgress = {};
+  
+  static Future<bool> canStartSync(String userId) async {
+    if (_syncInProgress[userId] == true) {
+      return false; // 同步正在进行中
+    }
+    _syncInProgress[userId] = true;
+    return true;
+  }
+  
+  static void finishSync(String userId) {
+    _syncInProgress[userId] = false;
+  }
+}
+方案C：版本检查 + 重试
+final syncStartVersion = localUser.avatarVersion;
+
+if (localUser.avatarVersion != syncStartVersion) {
+  return await syncProfileImage(userId);
+}
+推荐：方案A + 方案C 结合
+
+2. 网络中断问题
+问题场景：
+同步过程中网络断开，上传失败
+解决方案：
+class ImageSyncService {
+  static const int maxRetries = 3;
+  static const Duration retryDelay = Duration(seconds: 5);
+  
+  static Future<void> syncWithRetry(String userId) async {
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await syncProfileImage(userId);
+        return; // 成功
+      } catch (e) {
+        if (attempt == maxRetries) {
+          await markForRetry(userId);
+          rethrow;
+        }
+        await Future.delayed(retryDelay * attempt);
+      }
+    }
+  }
+}
+方案C：后台同步
+// 使用 WorkManager 或类似的后台任务
+class BackgroundSyncService {
+  static void scheduleSync(String userId) {
+    // 延迟执行，避免频繁重试
+    Timer(Duration(minutes: 5), () {
+      if (NetworkService.hasConnection()) {
+        syncProfileImage(userId);
+      } else {
+        scheduleSync(userId); // 重新调度
+      }
+    });
+  }
+}
+推荐：方案A + 方案C 结合
+
+3. 文件损坏问题
+问题场景：
+本地或远程文件损坏，无法读取
+解决方案：
+方案A：文件完整性检查
+class FileIntegrityService {
+  static Future<bool> isFileValid(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) return false;
+      
+      // 检查文件大小
+      final stat = await file.stat();
+      if (stat.size == 0) return false;
+      
+      // 尝试读取文件头，检查是否为有效图片
+      final bytes = await file.readAsBytes(0, 10);
+      return _isValidImageHeader(bytes);
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  static bool _isValidImageHeader(List<int> bytes) {
+    // 检查 JPEG, PNG, WebP 等格式的文件头
+    if (bytes.length < 4) return false;
+    
+    // JPEG: FF D8 FF
+    if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) return true;
+    
+    // PNG: 89 50 4E 47
+    if (bytes[0] == 0x89 && bytes[1] == 0x50 && 
+        bytes[2] == 0x4E && bytes[3] == 0x47) return true;
+    
+    return false;
+  }
+}
+方案B：备用方案策略
+static Future<String> getValidImagePath(String userId, int avatarVersion) async {
+  // 1. 尝试本地缓存
+  final localPath = await getLocalImagePath(userId, avatarVersion);
+  if (await FileIntegrityService.isFileValid(localPath)) {
+    return localPath;
+  }
+  
+  // 2. 尝试远程下载
+  final remotePath = await downloadRemoteImage(userId, avatarVersion);
+  if (await FileIntegrityService.isFileValid(remotePath)) {
+    return remotePath;
+  }
+  
+  // 3. 尝试旧版本
+  for (int version = avatarVersion - 1; version >= 0; version--) {
+    final oldPath = await getLocalImagePath(userId, version);
+    if (await FileIntegrityService.isFileValid(oldPath)) {
+      return oldPath;
+    }
+  }
+  
+  // 4. 返回默认头像
+  return getDefaultAvatarPath();
+}
+方案C：自动修复机制
+static Future<void> repairCorruptedFiles(String userId) async {
+  await deleteCorruptedFiles(userId);
+  
+  await reDownloadOrRegenerate(userId);
+  
+  showNotification("Some profile images were corrupted and have been repaired");
+}
+推荐：方案A + 方案B + 方案C 结合
+
+综合解决方案架构
+class RobustImageSyncService {
+  // 1. 同步前检查
+  static Future<bool> canStartSync(String userId) async {
+    if (isSyncInProgress(userId)) return false;
+    if (!await FileIntegrityService.isFileValid(getLocalPath(userId))) return false;
+    return true;
+  }
+  
+  // 2. 带重试的同步
+  static Future<void> syncWithRetry(String userId) async {
+    await syncWithRetry(userId, maxRetries: 3);
+  }
+  
+  // 3. 完整性验证
+  static Future<bool> validateSyncResult(String userId) async {
+    final localPath = getLocalPath(userId);
+    final remotePath = getRemotePath(userId);
+    
+    return await FileIntegrityService.isFileValid(localPath) &&
+           await FileIntegrityService.isFileValid(remotePath);
+  }
+  
+  // 4. 错误恢复
+  static Future<void> handleSyncFailure(String userId, Exception error) async {
+    await markForRetry(userId);
+    await scheduleBackgroundSync(userId);
+    await notifyUser("Sync failed, will retry automatically");
+  }
+}

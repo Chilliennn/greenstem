@@ -189,6 +189,8 @@ class UserModel {
       updatedAt: updatedAt,
       avatarVersion: avatarVersion,
       type: type,
+      isSynced: isSynced,
+      needsSync: needsSync,
     );
   }
 
@@ -212,8 +214,8 @@ class UserModel {
       profilePath: entity.profilePath,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt ?? DateTime.now(),
-      isSynced: isSynced ?? false,
-      needsSync: needsSync ?? true,
+      isSynced: isSynced ?? entity.isSynced,
+      needsSync: needsSync ?? entity.needsSync,
       isCurrentUser: isCurrentUser ?? false,
       version: version ?? 1,
       avatarVersion: entity.avatarVersion,

@@ -8,8 +8,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
 import 'core/services/background_task_service.dart';
+import 'core/services/network_sync_service.dart';
 import 'presentation/screens/splash/splash_screen.dart';
-import 'presentation/providers/auth_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,6 +46,9 @@ Future<void> main() async {
 
   // Initialize background tasks
   BackgroundTaskService.initialize();
+
+  // Initialize network sync service (integrated with existing sync)
+  NetworkSyncService.initialize();
 
   runApp(
     ProviderScope(
@@ -84,10 +87,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme
-            .of(context)
-            .colorScheme
-            .inversePrimary,
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(widget.title),
       ),
       body: Center(),

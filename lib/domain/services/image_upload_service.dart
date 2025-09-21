@@ -3,6 +3,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import '../../data/datasources/remote/supabase_storage_datasource.dart';
+import '../../core/services/network_service.dart';
+import '../../core/services/file_integrity_service.dart';
+import '../../core/services/network_sync_service.dart';
 import 'image_cache_service.dart';
 
 enum AvatarUploadState {
@@ -105,8 +108,21 @@ class ImageUploadService {
         return cachedFile.path;
       }
 
-      // 2. Try remote download if URL provided
-      if (remoteUrl != null && remoteUrl.isNotEmpty) {
+      // 2. Handle local:// paths
+      if (remoteUrl != null && remoteUrl.startsWith('local://')) {
+        final localPath = remoteUrl.replaceFirst('local://', '');
+        if (await FileIntegrityService.isFileValid(localPath)) {
+          print('✅ Using local avatar: $localPath');
+          return localPath;
+        } else {
+          print('❌ Local file is corrupted: $localPath');
+        }
+      }
+
+      // 3. Try remote download if URL provided
+      if (remoteUrl != null &&
+          remoteUrl.isNotEmpty &&
+          !remoteUrl.startsWith('local://')) {
         final downloadedPath = await _cacheService.downloadAndCacheImage(
           userId: userId,
           avatarVersion: avatarVersion,
@@ -119,7 +135,7 @@ class ImageUploadService {
         }
       }
 
-      // 3. Return default avatar
+      // 4. Return default avatar
       final defaultPath = _cacheService.getDefaultAvatarPath();
       print('🔄 Using default avatar: $defaultPath');
       return defaultPath;
@@ -150,6 +166,87 @@ class ImageUploadService {
 
       print('✅ Profile image updated successfully');
       return remoteUrl;
+    } catch (e) {
+      print('❌ Failed to update profile image: $e');
+      rethrow;
+    }
+  }
+
+  /// Update profile image with offline-first support
+  /// If offline, saves locally and returns a local path identifier
+  /// If online, saves both locally and remotely
+  static Future<String> updateProfileImageOfflineFirst({
+    required File imageFile,
+    required String userId,
+    required int currentAvatarVersion,
+  }) async {
+    try {
+      final newAvatarVersion = currentAvatarVersion + 1;
+
+      // Always save locally first (offline-first)
+      final imageBytes = await imageFile.readAsBytes();
+
+      // Check file integrity before processing
+      final isValidFile =
+          await FileIntegrityService.isFileValid(imageFile.path);
+      if (!isValidFile) {
+        throw Exception('Invalid image file format');
+      }
+
+      final localPath = await _cacheService.saveToCache(
+        userId: userId,
+        avatarVersion: newAvatarVersion,
+        imageBytes: imageBytes,
+      );
+
+      print('✅ Image saved locally: $localPath');
+
+      // Try to upload remotely if network is available
+      String profilePath = 'local://$localPath'; // Default to local path
+
+      try {
+        // Check if we have network connection with short timeout
+        final hasNetwork = await NetworkService.hasConnection()
+            .timeout(const Duration(seconds: 10));
+        if (hasNetwork) {
+          // Upload to Supabase Storage
+          final remoteUrl = await _storageService.uploadAvatarFromBytes(
+            userId: userId,
+            imageBytes: imageBytes,
+            avatarVersion: newAvatarVersion,
+            fileExtension: path.extension(imageFile.path),
+          );
+
+          print('✅ Image uploaded remotely: $remoteUrl');
+
+          // Verify upload success
+          final isAccessible =
+              await _storageService.verifyUploadSuccess(remoteUrl);
+          if (isAccessible) {
+            profilePath = remoteUrl;
+            print('✅ Remote upload verified successfully');
+          } else {
+            print('⚠️ Remote upload verification failed, using local path');
+          }
+        } else {
+          print('📱 Offline mode: Using local path only');
+        }
+      } catch (e) {
+        print('⚠️ Remote upload failed, using local path: $e');
+        // Continue with local path
+      }
+
+      // Clean up old cached versions
+      await _cacheService.deleteCachedImage(userId, currentAvatarVersion);
+
+      // If using local path, add to pending sync
+      if (profilePath.startsWith('local://')) {
+        NetworkSyncService.addPendingSync(userId);
+        print('📝 Added user $userId to pending sync list');
+      }
+
+      print('✅ Profile image updated successfully (offline-first)');
+      return profilePath;
     } catch (e) {
       print('❌ Failed to update profile image: $e');
       rethrow;

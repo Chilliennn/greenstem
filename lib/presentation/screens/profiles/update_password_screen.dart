@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/error_message_helper.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/custom_text_field.dart';
 
@@ -106,7 +107,8 @@ class _UpdatePasswordScreenState extends ConsumerState<UpdatePasswordScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to update password: $e'),
+            content: Text(ErrorMessageHelper.getShortErrorMessage(
+                'Failed to update password: $e')),
             backgroundColor: Colors.red,
           ),
         );

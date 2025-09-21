@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/email_service.dart';
+import '../../../core/utils/error_message_helper.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 import 'verification_code_screen.dart';
@@ -63,7 +64,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to send verification code: $e'),
+            content: Text(ErrorMessageHelper.getShortErrorMessage(
+                'Failed to send verification code: $e')),
             backgroundColor: Colors.red,
           ),
         );
