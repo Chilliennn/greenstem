@@ -18,9 +18,9 @@ class LocalUserDatabaseService {
   Future<UserModel> insertOrUpdateUser(UserModel user) async {
     final db = await database;
     final existing = await getUserById(user.userId);
-    
+
     if (existing != null) {
-      // Use Last-Write Wins strategy
+      // User exists - UPDATE
       if (user.isNewerThan(existing)) {
         await db.update(
           _tableName,
@@ -29,24 +29,44 @@ class LocalUserDatabaseService {
           whereArgs: [user.userId],
         );
         print('🔄 Updated user ${user.userId} (LWW: newer)');
+        _loadUsers();
+        return user;
       } else {
         print('⏭️ Skipped user ${user.userId} (LWW: older)');
         _loadUsers();
         return existing;
       }
     } else {
-      await db.insert(_tableName, user.toJson());
-      print('➕ Inserted new user ${user.userId}');
+      // User doesn't exist - INSERT
+      try {
+        await db.insert(
+          _tableName,
+          user.toJson(),
+          conflictAlgorithm: ConflictAlgorithm.replace, // Handle any conflicts
+        );
+        print('➕ Inserted new user ${user.userId}');
+        _loadUsers();
+        return user;
+      } catch (e) {
+        print('❌ Error inserting user ${user.userId}: $e');
+        // If insert fails, try to update instead
+        await db.update(
+          _tableName,
+          user.toJson(),
+          where: 'user_id = ?',
+          whereArgs: [user.userId],
+        );
+        print('🔄 Fallback: Updated user ${user.userId}');
+        _loadUsers();
+        return user;
+      }
     }
-
-    _loadUsers();
-    return user;
   }
 
   // Update user with version increment
   Future<UserModel> updateUser(UserModel user) async {
     final db = await database;
-    
+
     // Increment version for local updates
     final updatedUser = user.copyWith(
       version: user.version + 1,
@@ -54,7 +74,7 @@ class LocalUserDatabaseService {
       needsSync: true,
       isSynced: false,
     );
-    
+
     await db.update(
       _tableName,
       updatedUser.toJson(),
@@ -82,7 +102,9 @@ class LocalUserDatabaseService {
   Stream<UserModel?> watchUserByEmail(String email) async* {
     _loadUsers();
     await for (final users in _usersController.stream) {
-      yield users.where((u) => u.email?.toLowerCase() == email.toLowerCase()).firstOrNull;
+      yield users
+          .where((u) => u.email?.toLowerCase() == email.toLowerCase())
+          .firstOrNull;
     }
   }
 
