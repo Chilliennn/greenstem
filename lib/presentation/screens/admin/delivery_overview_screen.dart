@@ -37,7 +37,8 @@ class DeliveryOverviewScreen extends ConsumerStatefulWidget {
       _DeliveryOverviewScreenState();
 }
 
-class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen> {
+class _DeliveryOverviewScreenState
+    extends ConsumerState<DeliveryOverviewScreen> {
   // Remove TabController and SingleTickerProviderStateMixin
   late final DeliveryService _deliveryService;
   late final UserService _userService;
@@ -67,6 +68,10 @@ class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen>
 
   // Add current tab index
   int _currentTabIndex = 0;
+
+  // Add these new state variables at the top of _DeliveryOverviewScreenState
+  Map<String, String> _locationNameCache = {};
+  bool _isLoadingLocationNames = false;
 
   @override
   void initState() {
@@ -143,6 +148,53 @@ class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen>
     }
   }
 
+  // Add this method to resolve all location names upfront
+  Future<void> _loadLocationNames() async {
+    setState(() => _isLoadingLocationNames = true);
+
+    try {
+      // Get all unique location IDs from all deliveries
+      final allDeliveries = [..._assignedDeliveries, ..._completedDeliveries];
+      final locationIds = <String>{};
+
+      for (final delivery in allDeliveries) {
+        if (delivery.pickupLocation != null && delivery.pickupLocation!.isNotEmpty) {
+          locationIds.add(delivery.pickupLocation!);
+        }
+        if (delivery.deliveryLocation != null && delivery.deliveryLocation!.isNotEmpty) {
+          locationIds.add(delivery.deliveryLocation!);
+        }
+      }
+
+      // Load all location names concurrently
+      final futures = locationIds.map((locationId) async {
+        try {
+          final locationName = await _deliveryService.getLocationName(locationId);
+          return MapEntry(locationId, locationName ?? locationId);
+        } catch (e) {
+          print('Error loading location name for $locationId: $e');
+          return MapEntry(locationId, locationId);
+        }
+      });
+
+      final results = await Future.wait(futures);
+
+      if (mounted) {
+        setState(() {
+          _locationNameCache = Map.fromEntries(results);
+          _isLoadingLocationNames = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading location names: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingLocationNames = false;
+        });
+      }
+    }
+  }
+
   Future<void> _loadDeliveries() async {
     setState(() {
       _isLoading = true;
@@ -164,6 +216,9 @@ class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen>
         _filteredCompletedDeliveries = _completedDeliveries;
         _isLoading = false;
       });
+
+      // Load location names after deliveries are loaded
+      await _loadLocationNames();
     } catch (e) {
       setState(() {
         _errorMessage = 'Failed to load deliveries: $e';
@@ -451,23 +506,8 @@ class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen>
           }
         }
 
-        // Apply search query filter
-        bool matchesSearch = _searchQuery.isEmpty ||
-            delivery.deliveryId
-                .toLowerCase()
-                .contains(_searchQuery.toLowerCase()) ||
-            delivery.pickupLocation
-                    ?.toLowerCase()
-                    .contains(_searchQuery.toLowerCase()) ==
-                true ||
-            delivery.deliveryLocation
-                    ?.toLowerCase()
-                    .contains(_searchQuery.toLowerCase()) ==
-                true ||
-            delivery.status
-                    ?.toLowerCase()
-                    .contains(_searchQuery.toLowerCase()) ==
-                true;
+        // Apply search query filter using resolved location names
+        bool matchesSearch = _searchQuery.isEmpty || _matchesSearchQuery(delivery);
 
         return matchesStatus && matchesDateRange && matchesSearch;
       }).toList();
@@ -488,20 +528,40 @@ class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen>
           }
         }
 
-        // Apply search query filter
-        bool matchesSearch = _searchQuery.isEmpty ||
-            delivery.pickupLocation
-                    ?.toLowerCase()
-                    .contains(_searchQuery.toLowerCase()) ==
-                true ||
-            delivery.deliveryLocation
-                    ?.toLowerCase()
-                    .contains(_searchQuery.toLowerCase()) ==
-                true;
+        // Apply search query filter using resolved location names
+        bool matchesSearch = _searchQuery.isEmpty || _matchesSearchQuery(delivery);
 
         return matchesStatus && matchesDateRange && matchesSearch;
       }).toList();
     });
+  }
+
+  // Add this helper method for search matching
+  bool _matchesSearchQuery(Delivery delivery) {
+    final query = _searchQuery.toLowerCase().trim();
+
+    // Search by delivery status
+    if (delivery.status?.toLowerCase().contains(query) == true) {
+      return true;
+    }
+
+    // Search by pickup location name
+    if (delivery.pickupLocation != null) {
+      final pickupLocationName = _locationNameCache[delivery.pickupLocation!];
+      if (pickupLocationName?.toLowerCase().contains(query) == true) {
+        return true;
+      }
+    }
+
+    // Search by delivery location name
+    if (delivery.deliveryLocation != null) {
+      final deliveryLocationName = _locationNameCache[delivery.deliveryLocation!];
+      if (deliveryLocationName?.toLowerCase().contains(query) == true) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   void _filterDeliveries(String query) {
@@ -577,25 +637,38 @@ class _DeliveryOverviewScreenState extends ConsumerState<DeliveryOverviewScreen>
                 Expanded(
                   child: TextField(
                     style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      hintText: 'Search deliveries...',
-                      hintStyle: TextStyle(color: Colors.white54),
+                    decoration: InputDecoration(
+                      hintText: _isLoadingLocationNames
+                          ? 'Loading locations...'
+                          : 'Search...',
+                      hintStyle: const TextStyle(color: Colors.white54),
                       border: InputBorder.none,
                     ),
+                    enabled: !_isLoadingLocationNames,
                     onChanged: _filterDeliveries,
                   ),
                 ),
-                IconButton(
-                  icon: Icon(
-                    Icons.tune,
-                    color: (_selectedStatus != null ||
-                            _fromDate != null ||
-                            _toDate != null)
-                        ? const Color(0xFFFEA41D)
-                        : Colors.white70,
+                if (_isLoadingLocationNames)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white54,
+                    ),
+                  )
+                else
+                  IconButton(
+                    icon: Icon(
+                      Icons.tune,
+                      color: (_selectedStatus != null ||
+                              _fromDate != null ||
+                              _toDate != null)
+                          ? const Color(0xFFFEA41D)
+                          : Colors.white70,
+                    ),
+                    onPressed: _showFilterDialog,
                   ),
-                  onPressed: _showFilterDialog,
-                ),
               ],
             ),
           ),
@@ -732,20 +805,18 @@ class _DeliveryCardState extends State<_DeliveryCard> {
     }
   }
 
-  // Get location name by ID - same logic as item_card.dart
+  // Use the cached location names from parent if available
   Future<String> _getLocationName(String? locationId) async {
     if (locationId == null || locationId.isEmpty) {
       return 'Unknown Location';
     }
 
     try {
-      // Use the same method as item_card.dart
-      final locationName =
-          await widget.deliveryService.getLocationName(locationId);
-      return locationName ?? locationId; // Fallback to ID if name not found
+      final locationName = await widget.deliveryService.getLocationName(locationId);
+      return locationName ?? locationId;
     } catch (e) {
       print('Error getting location name for $locationId: $e');
-      return locationId; // Return the ID as fallback
+      return locationId;
     }
   }
 
