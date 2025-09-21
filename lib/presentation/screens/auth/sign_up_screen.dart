@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/error_message_helper.dart';
 import '../../../domain/params/sign_up_params.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/custom_button.dart';
@@ -371,7 +372,8 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
           if (current.errorMessage != null) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(current.errorMessage!),
+                content: Text(ErrorMessageHelper.getShortErrorMessage(
+                    current.errorMessage!)),
                 backgroundColor: Colors.red,
               ),
             );

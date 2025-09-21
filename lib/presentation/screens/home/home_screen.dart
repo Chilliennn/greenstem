@@ -20,6 +20,7 @@ import '../../../data/datasources/local/local_user_database_service.dart';
 import '../../../data/datasources/remote/remote_delivery_datasource.dart';
 import '../../../data/datasources/remote/remote_user_datasource.dart';
 import '../../../core/services/network_service.dart';
+import '../../../core/services/network_sync_service.dart';
 import '../profiles/profile_screen.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/offline_avatar.dart';
@@ -130,9 +131,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _connectivitySubscription =
         NetworkService.connectionStream.listen((isConnected) {
       if (mounted) {
+        print('🔄 HomeScreen: Network state changed to $isConnected');
         setState(() => _isOnline = isConnected);
 
         if (isConnected) {
+          print('🔄 HomeScreen: Starting sync due to network recovery');
           _syncAllData();
         }
       }
@@ -147,6 +150,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       print('starting data synchronization...');
       await _deliveryRepository.syncFromRemote();
       await _userRepository.syncFromRemote();
+
+      // Sync pending image uploads
+      await NetworkSyncService.syncPendingUsers();
+
       print('data synchronization completed');
     } catch (e) {
       print('sync error: $e');

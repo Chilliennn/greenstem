@@ -71,8 +71,9 @@ class _OfflineAvatarState extends ConsumerState<OfflineAvatar> {
     if (_isDisposed || !mounted) return;
 
     try {
-      // Only check if we have network connection
-      if (!await NetworkService.hasConnection()) {
+      // Only check if we have network connection with short timeout
+      if (!await NetworkService.hasConnection(useCache: false)
+          .timeout(const Duration(seconds: 10))) {
         return;
       }
 

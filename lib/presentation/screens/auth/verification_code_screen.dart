@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/email_service.dart';
+import '../../../core/utils/error_message_helper.dart';
 import '../../widgets/custom_button.dart';
 import 'reset_password_screen.dart';
 
@@ -108,7 +109,8 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Verification failed: $e'),
+            content: Text(ErrorMessageHelper.getShortErrorMessage(
+                'Verification failed: $e')),
             backgroundColor: Colors.red,
           ),
         );
@@ -147,7 +149,8 @@ class _VerificationCodeScreenState extends State<VerificationCodeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to resend code: $e'),
+            content: Text(ErrorMessageHelper.getShortErrorMessage(
+                'Failed to resend code: $e')),
             backgroundColor: Colors.red,
           ),
         );

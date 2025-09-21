@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/error_message_helper.dart';
 import '../../../data/repositories/user_repository_impl.dart';
 import '../../../data/datasources/local/local_user_database_service.dart';
 import '../../../data/datasources/remote/remote_user_datasource.dart';
@@ -113,7 +114,8 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to reset password: $e'),
+            content: Text(ErrorMessageHelper.getShortErrorMessage(
+                'Failed to reset password: $e')),
             backgroundColor: Colors.red,
           ),
         );

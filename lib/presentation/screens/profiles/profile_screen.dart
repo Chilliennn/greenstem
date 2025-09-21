@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/error_message_helper.dart';
 import '../../../domain/services/image_upload_service.dart';
 import '../../../domain/entities/user.dart';
 import '../../providers/auth_provider.dart';
@@ -427,7 +428,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Camera error: $e'),
+            content: Text(
+                ErrorMessageHelper.getShortErrorMessage('Camera error: $e')),
             backgroundColor: Colors.red,
           ),
         );
@@ -448,7 +450,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Gallery error: $e'),
+            content: Text(
+                ErrorMessageHelper.getShortErrorMessage('Gallery error: $e')),
             backgroundColor: Colors.red,
           ),
         );
@@ -490,8 +493,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
       );
 
-      // Use new dual save method (local + remote)
-      final String remoteUrl = await ImageUploadService.updateProfileImage(
+      // Use offline-first method
+      final String imageUrl =
+          await ImageUploadService.updateProfileImageOfflineFirst(
         imageFile: imageFile,
         userId: user.userId,
         currentAvatarVersion: user.avatarVersion,
@@ -501,7 +505,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       final userService = ref.read(userServiceProvider);
       await userService.updateProfileImage(
         user.userId,
-        remoteUrl,
+        imageUrl,
         user.avatarVersion + 1,
       );
 
@@ -520,7 +524,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to update profile picture: $e'),
+            content: Text(ErrorMessageHelper.getShortErrorMessage(
+                'Failed to update profile picture: $e')),
             backgroundColor: Colors.red,
           ),
         );
