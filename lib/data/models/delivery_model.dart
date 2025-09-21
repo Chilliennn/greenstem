@@ -84,7 +84,6 @@ class DeliveryModel {
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
       isSynced: true,
-      // From remote, so it's synced
       needsSync: false,
       version: (json['version'] as int?) ?? 1,
     );
