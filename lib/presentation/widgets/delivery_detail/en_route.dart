@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../domain/entities/delivery.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/entities/delivery_part.dart';
@@ -47,6 +48,7 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
   late final DeliveryPartService _deliveryPartService;
   late final PartService _partService;
   late final LocationService _locationService;
+  late final _url = "https://www.poslaju.com.my";
 
   bool _isLoadingParts = true;
   bool _isLoadingLocations = true;
@@ -55,7 +57,7 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
   User? _currentUser;
   List<DeliveryPart> _deliveryParts = [];
   Map<String, Part?> _partsMap = {};
-  File? _proofImage; // Changed to single image
+  File? _proofImage;
   String? _errorMessage;
 
   Location? _pickupLocation;
@@ -71,7 +73,6 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
     _loadCurrentUser();
     _loadDeliveryParts();
     _loadLocations();
-    _calculateDistance();
   }
 
   void _initializeServices() {
@@ -113,19 +114,26 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
     setState(() => _isLoadingLocations = true);
 
     try {
+      print('🔍 Loading locations for delivery: ${_currentDelivery!.deliveryId}');
+      print('🔍 Pickup location ID: ${_currentDelivery!.pickupLocation}');
+      print('🔍 Delivery location ID: ${_currentDelivery!.deliveryLocation}');
+
       if (_currentDelivery!.pickupLocation != null) {
         _pickupLocation = await _locationService.watchLocationById(_currentDelivery!.pickupLocation!).first;
+        print('🔍 Pickup location loaded: ${_pickupLocation?.name}, lat: ${_pickupLocation?.latitude}, lon: ${_pickupLocation?.longitude}');
       }
 
       if (_currentDelivery!.deliveryLocation != null) {
         _deliveryLocation = await _locationService.watchLocationById(_currentDelivery!.deliveryLocation!).first;
+        print('🔍 Delivery location loaded: ${_deliveryLocation?.name}, lat: ${_deliveryLocation?.latitude}, lon: ${_deliveryLocation?.longitude}');
       }
 
       if (mounted) {
         setState(() => _isLoadingLocations = false);
+        _calculateDistance();
       }
     } catch (e) {
-      print('Error loading locations: $e');
+      print('❌ Error loading locations: $e');
       if (mounted) {
         setState(() {
           _isLoadingLocations = false;
@@ -333,7 +341,7 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Delivery confirmed successfully!'),
-            backgroundColor: Colors.green,
+            backgroundColor: Colors.purple,
           ),
         );
         Navigator.of(context).pop();
@@ -355,14 +363,22 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
     }
   }
 
+  Future<void> launchMyUrl(String url) async {
+    final Uri uri = Uri.parse(url);
+
+    if (!await launchUrl(uri)) {
+      throw Exception('Could not launch $uri');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_currentDelivery == null) {
       return Scaffold(
-        backgroundColor: AppColors.cblack,
+        backgroundColor: const Color(0xFF111111),
         appBar: AppBar(
           title: const Text('En Route'),
-          backgroundColor: AppColors.cblack,
+          backgroundColor: const Color(0xFF111111),
           foregroundColor: Colors.white,
         ),
         body: const Center(
@@ -372,11 +388,12 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
     }
 
     final delivery = _currentDelivery!;
+    final progress = _calculateProgress();
 
     return Scaffold(
-      backgroundColor: AppColors.cblack,
+      backgroundColor: const Color(0xFF111111),
       appBar: AppBar(
-        backgroundColor: AppColors.cblack,
+        backgroundColor: const Color(0xFF111111),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -387,9 +404,10 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
             const Text(
               'En Route',
               style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold),
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(width: 8),
             Text(
@@ -406,17 +424,17 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
             child: CircleAvatar(
               radius: 18,
               backgroundColor: Colors.grey.shade300,
-              backgroundImage:
-              _currentUser != null ? _getProfileImage(_currentUser!) : null,
-              child: _currentUser != null &&
-                  _getProfileImage(_currentUser!) == null
+              backgroundImage: _currentUser != null ? _getProfileImage(_currentUser!) : null,
+              child: _currentUser != null && _getProfileImage(_currentUser!) == null
                   ? (_currentUser!.username?.isNotEmpty == true
-                  ? Text(
-                _currentUser!.username![0].toUpperCase(),
-                style: const TextStyle(
-                    color: Colors.black, fontWeight: FontWeight.bold),
-              )
-                  : const Icon(Icons.person, color: Colors.black, size: 20))
+                      ? Text(
+                          _currentUser!.username![0].toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.black, 
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                      : const Icon(Icons.person, color: Colors.black, size: 20))
                   : null,
             ),
           ),
@@ -427,7 +445,7 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Pickup and Delivery Location Card
+            // Pickup and Delivery Location Card 
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -447,7 +465,7 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey.shade400,
-                              ),
+                            ),
                             ),
                             const SizedBox(height: 6),
                             StreamBuilder<Location?>(
@@ -465,12 +483,12 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                               },
                             ),
                             const SizedBox(height: 4),
-                            FutureBuilder<String>(
-                              future: _locationService
-                                  .getLocationAddress(delivery.pickupLocation),
+                            StreamBuilder<Location?>(
+                              stream: _locationService.watchLocationById(delivery.pickupLocation!),
                               builder: (context, snapshot) {
+                                final location = snapshot.data;
                                 return Text(
-                                  snapshot.data ?? 'No address available',
+                                  location?.address ?? 'No address available',
                                   style: TextStyle(
                                     color: Colors.grey.shade400,
                                     fontSize: 14,
@@ -494,12 +512,12 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                               ),
                             ),
                             const SizedBox(height: 6),
-                            FutureBuilder<String>(
-                              future: _locationService
-                                  .getLocationName(delivery.deliveryLocation),
+                            StreamBuilder<Location?>(
+                              stream: _locationService.watchLocationById(delivery.deliveryLocation!),
                               builder: (context, snapshot) {
+                                final location = snapshot.data;
                                 return Text(
-                                  snapshot.data ?? 'Unknown',
+                                  location?.name ?? 'Unknown',
                                   textAlign: TextAlign.right,
                                   style: const TextStyle(
                                     fontSize: 20,
@@ -510,12 +528,12 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                               },
                             ),
                             const SizedBox(height: 4),
-                            FutureBuilder<String>(
-                              future: _locationService.getLocationAddress(
-                                  delivery.deliveryLocation),
+                            StreamBuilder<Location?>(
+                              stream: _locationService.watchLocationById(delivery.deliveryLocation!),
                               builder: (context, snapshot) {
+                                final location = snapshot.data;
                                 return Text(
-                                  snapshot.data ?? 'No address available',
+                                  location?.address ?? 'No address available',
                                   textAlign: TextAlign.right,
                                   style: TextStyle(
                                     color: Colors.grey.shade400,
@@ -558,12 +576,16 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                       Text(
                         '$_distanceText • $_durationText',
                         style: TextStyle(
-                            color: Colors.grey.shade400, fontSize: 14),
+                          color: Colors.grey.shade400,
+                          fontSize: 14,
+                        ),
                       ),
                       Text(
                         'Due: ${_formatDateTime(delivery.dueDatetime)}',
                         style: TextStyle(
-                            color: Colors.grey.shade400, fontSize: 14),
+                          color: Colors.grey.shade400,
+                          fontSize: 14,
+                        ),
                       ),
                     ],
                   ),
@@ -573,30 +595,95 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
 
             const SizedBox(height: 16),
 
-            // Stats Section
+            // Progress and Times Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: const Color(0xFF1D1D1D),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
+              child: Column(
                 children: [
-                  _buildStatItem(
-                    icon: Icons.location_on,
-                    label: 'Distance',
-                    value: _distanceText,
+                  Row(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Pick up at',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _formatTime(delivery.pickupTime),
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Actual',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'ETA',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _formatTime(delivery.dueDatetime),
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Estimated',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  _buildStatItem(
-                    icon: Icons.access_time,
-                    label: 'Time',
-                    value: _durationText,
+                  const SizedBox(height: 20),
+                  LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Colors.grey.shade700,
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.purple),
+                    minHeight: 6,
                   ),
-                  _buildStatItem(
-                    icon: Icons.inventory,
-                    label: 'Items',
-                    value: '${_getTotalItems()}',
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      '${(progress * 100).toInt()}%',
+                      style: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 14,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -628,113 +715,100 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                       child: Padding(
                         padding: EdgeInsets.all(20),
                         child: CircularProgressIndicator(
-                          valueColor:
-                          AlwaysStoppedAnimation<Color>(Colors.purple),
-                        ),
-                      ),
-                    )
-                  else if (_errorMessage != null)
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Text(
-                          _errorMessage!,
-                          style:
-                          const TextStyle(color: Colors.red, fontSize: 16),
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.purple),
                         ),
                       ),
                     )
                   else if (_deliveryParts.isEmpty)
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(20),
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text(
+                          'No parts found for this delivery',
+                          style: TextStyle(color: Colors.grey, fontSize: 16),
+                        ),
+                      ),
+                    )
+                  else ...[
+                    // Header row
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
                           child: Text(
-                            'No parts found for this delivery',
-                            style: TextStyle(color: Colors.grey, fontSize: 16),
+                            'Name',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
-                      )
-                    else ...[
-                        // Header row
-                        Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: Text(
-                                'Name',
-                                style: TextStyle(
-                                  color: Colors.grey.shade400,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            'Code',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
                             ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                'Code',
-                                style: TextStyle(
-                                  color: Colors.grey.shade400,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                'Unit',
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  color: Colors.grey.shade400,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
-                        const SizedBox(height: 12),
-                        ..._deliveryParts.map((part) => _buildPartRow(part)),
-                        const SizedBox(height: 16),
-                        Divider(color: Colors.grey.shade600),
-                        const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Vehicle',
-                              style: TextStyle(color: Colors.white, fontSize: 16),
+                        Expanded(
+                          child: Text(
+                            'Unit',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
                             ),
-                            Text(
-                              delivery.vehicleNumber ?? 'N/A',
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 16),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Total Items',
-                              style: TextStyle(color: Colors.white, fontSize: 16),
-                            ),
-                            Text(
-                              '${_getTotalItems()}',
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 16),
-                            ),
-                          ],
+                          ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Parts list
+                    ...(_deliveryParts.map((part) => _buildPartRow(part)).toList()),
+                    const SizedBox(height: 16),
+                    Divider(color: Colors.grey.shade600),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Vehicle',
+                          style: TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                        Text(
+                          delivery.vehicleNumber ?? 'N/A',
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Total Items',
+                          style: TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                        Text(
+                          '${_getTotalItems()}',
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
 
             const SizedBox(height: 16),
 
-            // Proof of Delivery Section
+            // Proof of Delivery Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -753,141 +827,98 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  if (_proofImage != null) ...[
+                  // Show captured images if any
+                  if (_proofImage != null) 
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(12),
                       child: Image.file(
                         _proofImage!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
                         height: 200,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _pickProofImage,
-                            icon: const Icon(Icons.camera_alt, color: Colors.white),
-                            label: const Text(
-                              'Retake Photo',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              side: const BorderSide(color: Colors.white),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                _proofImage = null;
-                              });
-                            },
-                            icon: const Icon(Icons.delete, color: Colors.white),
-                            label: const Text(
-                              'Remove',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ] else ...[
-                    Container(
-                      width: double.infinity,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade800,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.grey.shade600,
-                          style: BorderStyle.solid,
-                          width: 2,
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.camera_alt,
-                            size: 48,
-                            color: Colors.grey.shade400,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Take a photo as proof of delivery',
-                            style: TextStyle(
-                              color: Colors.grey.shade400,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: _pickProofImage,
-                      icon: const Icon(Icons.camera_alt, color: Colors.white),
-                      label: const Text(
-                        'Take Photo',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.purple,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ],
+                    )
+                  else
+                    const SizedBox.shrink(),
                 ],
               ),
             ),
 
             const SizedBox(height: 32),
 
-            // Confirm Delivery Button
-            if (_isUploading)
-              const Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.purple),
+            // Button Row: Confirm Delivery with Camera Icon
+            Row(
+              children: [
+                // Confirm Delivery Button
+                Expanded(
+                  child: _isUploading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.purple),
+                          ),
+                        )
+                      : ElevatedButton.icon(
+                          onPressed: _confirmDelivery,
+                          icon: const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                          label: const Text(
+                            'Confirm Delivery',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.purple,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                        ),
                 ),
-              )
-            else
-              ElevatedButton(
-                onPressed: _confirmDelivery,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(
+                
+                const SizedBox(width: 12),
+                
+                // Camera Button
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1D1D1D),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                ),
-                child: const Text(
-                  'Confirm Delivery',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                  child: IconButton(
+                    onPressed: _pickProofImage,
+                    icon: const Icon(
+                      Icons.camera_alt,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                    padding: const EdgeInsets.all(18),
                   ),
                 ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Contact Button
+            OutlinedButton.icon(
+              onPressed: () async {
+                launchMyUrl(_url);
+              },
+              icon: const Icon(Icons.call, color: Colors.white),
+              label: const Text(
+                'Contact',
+                style: TextStyle(color: Colors.white, fontSize: 16),
               ),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                side: const BorderSide(color: Colors.white),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ),
 
             const SizedBox(height: 32),
           ],
@@ -896,31 +927,29 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
     );
   }
 
-  Widget _buildStatItem({required IconData icon, required String label, required String value}) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.purple, size: 24),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.grey.shade400,
-            fontSize: 12,
-          ),
-        ),
-        if (value.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ],
-    );
+  double _calculateProgress() {
+    if (_currentDelivery == null ||
+        _currentDelivery!.pickupTime == null ||
+        _currentDelivery!.dueDatetime == null) {
+      return 0.0;
+    }
+
+    final now = DateTime.now();
+    final pickupTime = _currentDelivery!.pickupTime!;
+    final eta = _currentDelivery!.dueDatetime!;
+
+    if (now.isBefore(pickupTime)) return 0.0; // Not started
+    if (now.isAfter(eta)) return 1.0; // Completed
+
+    final elapsed = now.difference(pickupTime).inMinutes;
+    final totalEstimated = eta.difference(pickupTime).inMinutes;
+
+    return totalEstimated > 0 ? elapsed / totalEstimated : 0.75; // Default to 75% if calculation fails
+  }
+
+  String _formatTime(DateTime? dt) {
+    if (dt == null) return '-';
+    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
   Widget _buildPartRow(DeliveryPart part) {
@@ -934,6 +963,7 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
             child: Text(
               partDetails?.name ?? 'Unknown Part',
               style: const TextStyle(color: Colors.white, fontSize: 14),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Expanded(
