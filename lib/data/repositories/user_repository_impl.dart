@@ -13,62 +13,77 @@ class UserRepositoryImpl implements UserRepository {
   Timer? _syncTimer;
   StreamSubscription? _remoteSubscription;
   StreamSubscription? _localSubscription;
+  
+  // Enhanced sync control
+  bool _isSyncing = false;
+  bool _isInitializing = true;
+  Timer? _localSyncDebounce;
+  Timer? _remoteSyncDebounce;
+  DateTime? _lastLocalSync;
+  DateTime? _lastRemoteSync;
+  bool _disposed = false;
 
   UserRepositoryImpl(this._localDataSource, this._remoteDataSource) {
     _initPeriodicSync();
     _initInitialSync();
-    _initBidirectionalSync();
+    // Delay bidirectional sync to avoid conflicts during initialization
+    Future.delayed(const Duration(seconds: 2), () {
+      if (!_disposed) {
+        _initBidirectionalSync();
+      }
+    });
   }
 
   void _initPeriodicSync() {
-    _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-      _syncInBackground();
+    _syncTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (!_isSyncing && !_disposed) {
+        _syncInBackground();
+      }
     });
   }
 
   Future<void> _initInitialSync() async {
-    if (await hasNetworkConnection()) {
+    if (_disposed) return;
+    
+    if (await hasNetworkConnection() && !_isSyncing) {
+      _isSyncing = true;
       try {
         print('🔄 Initial user sync: Fetching data from remote...');
         await syncFromRemote();
-        await syncToRemote();
         print('✅ Initial user sync completed');
       } catch (e) {
-        print('❌ Initial user sync failed: $e');
+        print('❌ Initial sync failed: $e');
+      } finally {
+        _isSyncing = false;
+        _isInitializing = false;
       }
+    } else {
+      _isInitializing = false;
     }
   }
 
   void _initBidirectionalSync() {
-    // Listen to remote changes and apply to local
-    _remoteSubscription = _remoteDataSource.watchAllUsers().listen(
-      (remoteUsers) async {
-        if (await hasNetworkConnection()) {
-          print('📡 Remote user changes detected, syncing to local...');
-          await _syncRemoteToLocal(remoteUsers);
-        }
-      },
-      onError: (error) {
-        print('❌ Remote user sync error: $error');
-      },
-    );
+    if (_disposed) return;
+    
+    // COMPLETELY DISABLE sync to prevent interference with navigation
+    print('🔇 All sync operations disabled to prevent navigation interference');
+    
+    // Only enable sync after a long delay (after app has fully loaded)
+    Future.delayed(const Duration(seconds: 30), () {
+      if (!_disposed) {
+        print('🔄 Re-enabling sync after app initialization');
+        _enableLimitedSync();
+      }
+    });
+  }
 
-    // Listen to local changes and sync to remote (with debouncing)
-    Timer? localSyncDebounce;
-    _localSubscription = _localDataSource.watchAllUsers().listen(
-      (localUsers) async {
-        localSyncDebounce?.cancel();
-        localSyncDebounce = Timer(const Duration(seconds: 2), () async {
-          if (await hasNetworkConnection()) {
-            print('📱 Local user changes detected, syncing to remote...');
-            await syncToRemote();
-          }
-        });
-      },
-      onError: (error) {
-        print('❌ Local user sync error: $error');
-      },
-    );
+  void _enableLimitedSync() {
+    // Very limited sync - only check for changes every 5 minutes
+    _syncTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (!_isSyncing && !_disposed) {
+        _syncInBackground();
+      }
+    });
   }
 
   // Replace the _syncRemoteToLocal method to fix the UNIQUE constraint error:
@@ -151,13 +166,16 @@ class UserRepositoryImpl implements UserRepository {
   }
 
   Future<void> _syncInBackground() async {
-    if (await hasNetworkConnection()) {
-      try {
-        await syncFromRemote();
-        await syncToRemote();
-      } catch (e) {
-        print('❌ Background user sync failed: $e');
-      }
+    if (_isSyncing || !await hasNetworkConnection()) return;
+    
+    _isSyncing = true;
+    try {
+      await syncFromRemote();
+      await syncToRemote();
+    } catch (e) {
+      print('❌ Background sync error: $e');
+    } finally {
+      _isSyncing = false;
     }
   }
 
@@ -443,34 +461,26 @@ class UserRepositoryImpl implements UserRepository {
   @override
   Future<void> syncToRemote() async {
     if (!await hasNetworkConnection()) {
-      print('⚠️ No network connection for user sync to remote');
+      print('📡 No network connection for local sync');
       return;
     }
 
     try {
-      final unsyncedUsers = await _localDataSource.getUnsyncedUsers();
-      if (unsyncedUsers.isEmpty) return;
+      final localUsers = await _localDataSource.getUnsyncedUsers();
+      if (localUsers.isEmpty) {
+        print('📤 No local changes to sync to remote');
+        return;
+      }
 
-      print(
-          '📤 Syncing ${unsyncedUsers.length} local user changes to remote...');
+      print('📤 Syncing ${localUsers.length} users to remote...');
 
-      for (final user in unsyncedUsers) {
+      for (final user in localUsers) {
         try {
-          final remoteUser = await _remoteDataSource.getUserById(user.userId);
-
-          if (remoteUser == null) {
-            await _remoteDataSource.createUser(user);
-            print('➕ Created user ${user.userId} remotely');
-          } else {
-            if (user.isNewerThan(remoteUser)) {
-              await _remoteDataSource.updateUser(user);
-              print('🔄 Updated user ${user.userId} remotely (LWW)');
-            } else {
-              print('⏭️ Skipped user ${user.userId} (remote is newer)');
-            }
+          if (user.needsSync) {
+            await _remoteDataSource.updateUser(user);
+            await _localDataSource.markAsSynced(user.userId);
+            print('✅ Synced user ${user.userId} to remote');
           }
-
-          await _localDataSource.markAsSynced(user.userId);
         } catch (e) {
           print('❌ Failed to sync user ${user.userId}: $e');
         }
@@ -478,15 +488,15 @@ class UserRepositoryImpl implements UserRepository {
 
       print('✅ Local→Remote user sync completed');
     } catch (e) {
-      print('❌ Local→Remote user sync failed: $e');
-      throw Exception('Failed to sync to remote: $e');
+      print('❌ Error syncing to remote: $e');
+      rethrow;
     }
   }
 
   @override
   Future<void> syncFromRemote() async {
     if (!await hasNetworkConnection()) {
-      print('⚠️ No network connection for user sync from remote');
+      print('📡 No network connection for remote sync');
       return;
     }
 
@@ -495,8 +505,8 @@ class UserRepositoryImpl implements UserRepository {
       final remoteUsers = await _remoteDataSource.getAllUsers();
       await _syncRemoteToLocal(remoteUsers);
     } catch (e) {
-      print('❌ User sync from remote failed: $e');
-      throw Exception('Failed to sync from remote: $e');
+      print('❌ Error syncing from remote: $e');
+      rethrow;
     }
   }
 
@@ -591,7 +601,10 @@ class UserRepositoryImpl implements UserRepository {
   }
 
   void dispose() {
+    _disposed = true;
     _syncTimer?.cancel();
+    _localSyncDebounce?.cancel();
+    _remoteSyncDebounce?.cancel();
     _remoteSubscription?.cancel();
     _localSubscription?.cancel();
     _localDataSource.dispose();
