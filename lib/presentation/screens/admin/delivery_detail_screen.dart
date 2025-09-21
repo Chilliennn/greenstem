@@ -75,18 +75,12 @@ class _DeliveryOverviewDetailScreenState
   }
 
   void _initializeServices() {
-    // Initialize delivery services
-    final localDeliveryDataSource = LocalDeliveryDatabaseService();
-    final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
-    final deliveryRepository = DeliveryRepositoryImpl(
-        localDeliveryDataSource, remoteDeliveryDataSource);
-
-    // Initialize user services
-    final localUserDataSource = LocalUserDatabaseService();
-    final remoteUserDataSource = SupabaseUserDataSource();
-    final userRepository =
-        UserRepositoryImpl(localUserDataSource, remoteUserDataSource);
-    _userService = UserService(userRepository);
+    // Initialize location services first
+    final localLocationDataSource = LocalLocationDatabaseService();
+    final remoteLocationDataSource = SupabaseLocationDataSource();
+    final locationRepository = LocationRepositoryImpl(
+        localLocationDataSource, remoteLocationDataSource);
+    _locationService = LocationService(locationRepository);
 
     // Initialize delivery part services
     final localDeliveryPartDataSource = LocalDeliveryPartDatabaseService();
@@ -95,22 +89,32 @@ class _DeliveryOverviewDetailScreenState
         localDeliveryPartDataSource, remoteDeliveryPartDataSource);
     _deliveryPartService = DeliveryPartService(deliveryPartRepository);
 
+    // Initialize delivery services with ALL required repositories
+    final localDeliveryDataSource = LocalDeliveryDatabaseService();
+    final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
+    final deliveryRepository = DeliveryRepositoryImpl(
+        localDeliveryDataSource, remoteDeliveryDataSource);
+
+    // IMPORTANT: Pass all three repositories to DeliveryService like in delivery_overview_screen.dart
+    _deliveryService = DeliveryService(
+      deliveryRepository,
+      deliveryPartRepository, // This was missing!
+      locationRepository, // This was missing!
+    );
+
+    // Initialize user services
+    final localUserDataSource = LocalUserDatabaseService();
+    final remoteUserDataSource = SupabaseUserDataSource();
+    final userRepository =
+        UserRepositoryImpl(localUserDataSource, remoteUserDataSource);
+    _userService = UserService(userRepository);
+
     // Initialize part services
     final localPartDataSource = LocalPartDatabaseService();
     final remotePartDataSource = SupabasePartDataSource();
     final partRepository =
         PartRepositoryImpl(localPartDataSource, remotePartDataSource);
     _partService = PartService(partRepository);
-
-    // Initialize location services
-    final localLocationDataSource = LocalLocationDatabaseService();
-    final remoteLocationDataSource = SupabaseLocationDataSource();
-    final locationRepository = LocationRepositoryImpl(
-        localLocationDataSource, remoteLocationDataSource);
-    _locationService = LocationService(locationRepository);
-
-    _deliveryService = DeliveryService(
-        deliveryRepository, deliveryPartRepository, locationRepository);
   }
 
   Future<void> _loadCurrentUser() async {
@@ -178,20 +182,30 @@ class _DeliveryOverviewDetailScreenState
     setState(() => _isLoadingLocations = true);
 
     try {
+      Location? pickupLocation;
+      Location? deliveryLocation;
+
       if (_currentDelivery!.pickupLocation != null) {
-        _pickupLocation = await _locationService
+        pickupLocation = await _locationService
             .watchLocationById(_currentDelivery!.pickupLocation!)
             .first;
       }
 
       if (_currentDelivery!.deliveryLocation != null) {
-        _deliveryLocation = await _locationService
+        deliveryLocation = await _locationService
             .watchLocationById(_currentDelivery!.deliveryLocation!)
             .first;
       }
 
       if (mounted) {
-        setState(() => _isLoadingLocations = false);
+        setState(() {
+          _pickupLocation = pickupLocation;
+          _deliveryLocation = deliveryLocation;
+          _isLoadingLocations = false;
+        });
+
+        // Calculate distance after locations are loaded
+        _calculateDistance();
       }
     } catch (e) {
       print('Error loading locations: $e');
@@ -205,10 +219,8 @@ class _DeliveryOverviewDetailScreenState
   }
 
   Future<void> _calculateDistance() async {
-    if (_pickupLocation?.latitude == null ||
-        _pickupLocation?.longitude == null ||
-        _deliveryLocation?.latitude == null ||
-        _deliveryLocation?.longitude == null) {
+    if (_currentDelivery?.pickupLocation == null ||
+        _currentDelivery?.deliveryLocation == null) {
       setState(() {
         _distanceText = 'n/a';
         _durationText = 'n/a';
@@ -217,19 +229,18 @@ class _DeliveryOverviewDetailScreenState
     }
 
     try {
-      final coordinates = {
-        'pickupLat': _pickupLocation!.latitude,
-        'pickupLon': _pickupLocation!.longitude,
-        'deliveryLat': _deliveryLocation!.latitude,
-        'deliveryLon': _deliveryLocation!.longitude,
-      };
+      // Use the same method as delivery_overview_screen.dart
+      final coordinates = await _deliveryService.getDeliveryCoordinates(
+        _currentDelivery!.pickupLocation!,
+        _currentDelivery!.deliveryLocation!,
+      );
 
       final distance = await DistanceCalculator.calculateDistance(
-        coordinates['pickupLat']!,
-        coordinates['pickupLon']!,
-        coordinates['deliveryLat']!,
-        coordinates['deliveryLon']!,
-        useApi: false,
+        coordinates['pickupLat'],
+        coordinates['pickupLon'],
+        coordinates['deliveryLat'],
+        coordinates['deliveryLon'],
+        useApi: false, // Same as other screens
       );
 
       if (distance != null && mounted) {
@@ -317,7 +328,7 @@ class _DeliveryOverviewDetailScreenState
           ),
           title: const Text(
             'Delivery Details',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            style: TextStyle(color: Colors.white, fontSize: 16),
           ),
         ),
         body: const Center(
@@ -339,7 +350,7 @@ class _DeliveryOverviewDetailScreenState
         ),
         title: const Text(
           'Delivery Details',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          style: TextStyle(color: Colors.white, fontSize: 16),
         ),
         actions: [
           if (_currentUser != null)
@@ -478,9 +489,6 @@ class _DeliveryOverviewDetailScreenState
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _buildDetailRow('Delivery ID', _currentDelivery!.deliveryId),
-                  _buildDetailRow(
-                      'User ID', _currentDelivery!.userId ?? 'Not assigned'),
                   _buildDetailRow(
                       'Status', _currentDelivery!.status ?? 'Unknown'),
                   _buildDetailRow('Vehicle Number',
@@ -603,7 +611,7 @@ class _DeliveryOverviewDetailScreenState
             ),
           ),
           const Text(
-            ': ',
+            ':\t\t\t\t',
             style: TextStyle(color: Colors.white70),
           ),
           Expanded(
