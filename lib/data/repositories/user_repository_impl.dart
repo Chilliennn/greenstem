@@ -13,7 +13,7 @@ class UserRepositoryImpl implements UserRepository {
   Timer? _syncTimer;
   StreamSubscription? _remoteSubscription;
   StreamSubscription? _localSubscription;
-  
+
   // Enhanced sync control
   bool _isSyncing = false;
   bool _isInitializing = true;
@@ -44,7 +44,7 @@ class UserRepositoryImpl implements UserRepository {
 
   Future<void> _initInitialSync() async {
     if (_disposed) return;
-    
+
     if (await hasNetworkConnection() && !_isSyncing) {
       _isSyncing = true;
       try {
@@ -64,10 +64,10 @@ class UserRepositoryImpl implements UserRepository {
 
   void _initBidirectionalSync() {
     if (_disposed) return;
-    
+
     // COMPLETELY DISABLE sync to prevent interference with navigation
     print('🔇 All sync operations disabled to prevent navigation interference');
-    
+
     // Only enable sync after a long delay (after app has fully loaded)
     Future.delayed(const Duration(seconds: 30), () {
       if (!_disposed) {
@@ -167,7 +167,7 @@ class UserRepositoryImpl implements UserRepository {
 
   Future<void> _syncInBackground() async {
     if (_isSyncing || !await hasNetworkConnection()) return;
-    
+
     _isSyncing = true;
     try {
       await syncFromRemote();
@@ -210,10 +210,16 @@ class UserRepositoryImpl implements UserRepository {
 
   @override
   Future<User?> login(String username, String password) async {
-    try {
-      // Try remote login first
-      if (await hasNetworkConnection()) {
-        final remoteUser = await _remoteDataSource.login(username, password);
+  try {
+    // Check network connection first
+    final hasNetwork = await hasNetworkConnection();
+    
+    if (hasNetwork) {
+      try {
+        // Add timeout to remote login to prevent long waits
+        final remoteUser = await _remoteDataSource.login(username, password)
+            .timeout(const Duration(seconds: 10));
+        
         if (remoteUser != null) {
           // Save user locally and mark as current user
           final localUser = remoteUser.copyWith(
@@ -225,21 +231,36 @@ class UserRepositoryImpl implements UserRepository {
           await _localDataSource.setCurrentUser(remoteUser.userId);
           return localUser.toEntity().toPublicUser();
         }
+      } catch (e) {
+        print('❌ Remote login failed: $e');
+        // Continue to local login even if remote fails
       }
-
-      // Fallback to local login if remote fails or no network
-      final localUser = await _localDataSource.getUserByUsername(username);
-      if (localUser != null && localUser.password == password) {
-        await _localDataSource.setCurrentUser(localUser.userId);
-        return localUser.toEntity().toPublicUser();
-      }
-
-      return null;
-    } catch (e) {
-      print('❌ Login error: $e');
-      throw Exception('Login failed: $e');
+    } else {
+      print('📱 No network connection, skipping remote login');
     }
+
+    // Fallback to local login if remote fails or no network
+    final localUser = await _localDataSource.getUserByUsername(username);
+
+    if (localUser != null) {
+      if (localUser.password == password) {
+        await _localDataSource.setCurrentUser(localUser.userId);
+        print('✅ Local login successful');
+        return localUser.toEntity().toPublicUser();
+      } else {
+        print('❌ Password mismatch');
+      }
+    } else {
+      print('❌ User not found in local database');
+    }
+
+    print('❌ Login failed - no matching user or wrong password');
+    return null;
+  } catch (e) {
+    print('❌ Login error: $e');
+    throw Exception('Login failed: $e');
   }
+}
 
   @override
   Future<User> register(User user) async {
@@ -517,6 +538,50 @@ class UserRepositoryImpl implements UserRepository {
   Future<List<User>> getCachedUsers() async {
     final models = await _localDataSource.getAllUsers();
     return models.map((model) => model.toEntity().toPublicUser()).toList();
+  }
+
+  @override
+  Future<List<User>> getAllUsers() async {
+    try {
+      if (await hasNetworkConnection()) {
+        // Get from remote if online
+        final remoteUsers = await _remoteDataSource.getAllUsers();
+        return remoteUsers
+            .map((model) => model.toEntity().toPublicUser())
+            .toList();
+      } else {
+        // Fallback to local cache if offline
+        return await getCachedUsers();
+      }
+    } catch (e) {
+      print('❌ Error getting all users: $e');
+      // Fallback to local cache on error
+      return await getCachedUsers();
+    }
+  }
+
+  @override
+  Future<User?> getUserById(String userId) async {
+    try {
+      if (await hasNetworkConnection()) {
+        // Try remote first if online
+        final remoteUsers = await _remoteDataSource.getAllUsers();
+        final remoteUser =
+            remoteUsers.where((u) => u.userId == userId).firstOrNull;
+        if (remoteUser != null) {
+          return remoteUser.toEntity().toPublicUser();
+        }
+      }
+
+      // Fallback to local cache
+      final localUser = await _localDataSource.getUserById(userId);
+      return localUser?.toEntity().toPublicUser();
+    } catch (e) {
+      print('❌ Error getting user by ID: $e');
+      // Fallback to local cache on error
+      final localUser = await _localDataSource.getUserById(userId);
+      return localUser?.toEntity().toPublicUser();
+    }
   }
 
   @override

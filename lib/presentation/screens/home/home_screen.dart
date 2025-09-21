@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:greenstem/data/datasources/local/local_delivery_part_database_service.dart';
@@ -8,14 +7,12 @@ import 'package:greenstem/data/datasources/remote/remote_delivery_part_datasourc
 import 'package:greenstem/data/datasources/remote/remote_location_datasource.dart';
 import 'package:greenstem/data/repositories/location_repository_impl.dart';
 import 'package:greenstem/domain/entities/delivery.dart';
-import 'package:greenstem/domain/services/location_service.dart';
 import '../../../data/repositories/delivery_part_repository_impl.dart';
 import '../../../presentation/widgets/home/active_tab.dart';
 import '../../../presentation/widgets/home/history_tab.dart';
 import '../../../presentation/widgets/home/sliding_tab_switcher.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/services/delivery_service.dart';
-import '../../../domain/services/user_service.dart';
 import '../../../data/repositories/delivery_repository_impl.dart';
 import '../../../data/repositories/user_repository_impl.dart';
 import '../../../data/datasources/local/local_delivery_database_service.dart';
@@ -25,6 +22,7 @@ import '../../../data/datasources/remote/remote_user_datasource.dart';
 import '../../../core/services/network_service.dart';
 import '../profiles/profile_screen.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/common/offline_avatar.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -35,7 +33,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   late final DeliveryService _deliveryService;
-  late final UserService _userService;
   late final DeliveryRepositoryImpl _deliveryRepository;
   late final DeliveryPartRepositoryImpl _deliveryPartRepository;
   late final UserRepositoryImpl _userRepository;
@@ -46,7 +43,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool isActiveTab = true;
   bool _isSyncing = false;
   bool _servicesInitialized = false;
-  User? _currentUser; // cache the user here
 
   @override
   void initState() {
@@ -108,7 +104,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final remoteUserDataSource = SupabaseUserDataSource();
       _userRepository =
           UserRepositoryImpl(localUserDataSource, remoteUserDataSource);
-      _userService = UserService(_userRepository);
 
       setState(() {
         _servicesInitialized = true;
@@ -164,42 +159,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  Future<User?> _getCurrentUser() async {
-    if (_currentUser != null) {
-      return _currentUser; // return cached user
-    }
-
-    try {
-      final userService = ref.read(userServiceProvider);
-      final user = await userService.watchCurrentUser().first;
-      _currentUser = user; // cache the user
-      return user;
-    } catch (e) {
-      print('error getting current user: $e');
-      return null;
-    }
-  }
-
-  // Add this method to get profile image - same logic as profile_screen.dart
-  ImageProvider? _getProfileImage(User user) {
-    if (user.profilePath == null || user.profilePath!.isEmpty) {
-      return null;
-    }
-
-    if (user.profilePath!.startsWith('/')) {
-      final File imageFile = File(user.profilePath!);
-      if (imageFile.existsSync()) {
-        return FileImage(imageFile);
-      }
-    }
-
-    if (user.profilePath!.startsWith('http')) {
-      return NetworkImage(user.profilePath!);
-    }
-
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
     if (!_servicesInitialized) {
@@ -222,79 +181,79 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
     final userStream = ref.watch(userServiceProvider).watchCurrentUser();
     return StreamBuilder<User?>(
-        stream: userStream,
-        builder: (context, userSnapshot) {
-          print(
-              'home screen: connectionstate=${userSnapshot.connectionState}, hasdata=${userSnapshot.hasData}, haserror=${userSnapshot.hasError}');
+      stream: userStream,
+      builder: (context, userSnapshot) {
+        print(
+            'home screen: connectionstate=${userSnapshot.connectionState}, hasdata=${userSnapshot.hasData}, haserror=${userSnapshot.hasError}');
 
-          if (userSnapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              backgroundColor: Color(0xFF111111),
-              body: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text(
-                      'Loading user data...',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ],
-                ),
+        if (userSnapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: Color(0xFF111111),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text(
+                    'Loading user data...',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ],
               ),
-            );
-          }
-          if (userSnapshot.hasError) {
-            print('home screen user error: ${userSnapshot.error}');
-            return Scaffold(
-              backgroundColor: const Color(0xFF111111),
-              body: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error, size: 64, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Error loading user: ${userSnapshot.error}',
-                      style: const TextStyle(color: Colors.white),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        _checkConnectivity();
-                        if (_isOnline) _syncAllData();
-                      },
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-          final currentUser = userSnapshot.data;
-          if (currentUser == null) {
-            return const Scaffold(
-              backgroundColor: Color(0xFF111111),
-              body: Center(
-                child: Text(
-                  'No user logged in',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            );
-          }
-          print('home screen: current user loaded: ${currentUser.userId}');
-
-          return _HomeContent(
-            currentUser: currentUser,
-            deliveryService: _deliveryService,
-            isOnline: _isOnline,
-            onSyncData: _syncAllData,
-            onCheckConnectivity: _checkConnectivity,
-            getProfileImage: _getProfileImage, // Pass the method
+            ),
           );
+        }
+        if (userSnapshot.hasError) {
+          print('home screen user error: ${userSnapshot.error}');
+          return Scaffold(
+            backgroundColor: const Color(0xFF111111),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error, size: 64, color: Colors.red),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error loading user: ${userSnapshot.error}',
+                    style: const TextStyle(color: Colors.white),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      _checkConnectivity();
+                      if (_isOnline) _syncAllData();
+                    },
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        final currentUser = userSnapshot.data;
+        if (currentUser == null) {
+          return const Scaffold(
+            backgroundColor: Color(0xFF111111),
+            body: Center(
+              child: Text(
+                'No user logged in',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          );
+        }
+        print('home screen: current user loaded: ${currentUser.userId}');
+
+        return _HomeContent(
+          currentUser: currentUser,
+          deliveryService: _deliveryService,
+          isOnline: _isOnline,
+          isSyncing: _isSyncing,
+          onSyncData: _syncAllData,
+          onCheckConnectivity: _checkConnectivity,
+        );
       },
     );
   }
@@ -313,17 +272,17 @@ class _HomeContent extends StatefulWidget {
   final User currentUser;
   final DeliveryService deliveryService;
   final bool isOnline;
+  final bool isSyncing;
   final VoidCallback onSyncData;
   final VoidCallback onCheckConnectivity;
-  final ImageProvider? Function(User) getProfileImage; // Add this parameter
 
   const _HomeContent({
     required this.currentUser,
     required this.deliveryService,
     required this.isOnline,
+    required this.isSyncing,
     required this.onSyncData,
     required this.onCheckConnectivity,
-    required this.getProfileImage, // Add this parameter
   });
 
   @override
@@ -337,9 +296,24 @@ class _HomeContentState extends State<_HomeContent> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Home',
-          style: TextStyle(color: Colors.white, fontSize: 16),
+        title: Row(
+          children: [
+            const Text(
+              'Home',
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
+            if (widget.isSyncing) ...[
+              const SizedBox(width: 8),
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+            ],
+          ],
         ),
         backgroundColor: const Color(0xFF111111),
         actions: [
@@ -354,22 +328,11 @@ class _HomeContentState extends State<_HomeContent> {
                 );
               },
               borderRadius: BorderRadius.circular(20),
-              child: CircleAvatar(
+              child: OfflineAvatar(
+                user: widget.currentUser,
                 radius: 20,
                 backgroundColor: Colors.grey[300],
-                backgroundImage: widget.getProfileImage(
-                    widget.currentUser), // Use the profile image
-                child: widget.getProfileImage(widget.currentUser) == null
-                    ? (widget.currentUser.username?.isNotEmpty == true
-                        ? Text(
-                            widget.currentUser.username![0].toUpperCase(),
-                            style: const TextStyle(
-                              color: Colors.black,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )
-                        : const Icon(Icons.person, color: Colors.black))
-                    : null, // Don't show child if we have an image
+                foregroundColor: Colors.black,
               ),
             ),
           ),
