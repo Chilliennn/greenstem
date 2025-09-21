@@ -23,7 +23,7 @@ class SupabaseStorageDatasource {
       // Generate unique filename with timestamp to avoid conflicts
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final extension = path.extension(imageFile.path);
-      final fileName = '${userId}_${timestamp}$extension';
+      final fileName = '${userId}_$timestamp$extension';
       final filePath = '$_avatarFolder/$userId/$fileName';
 
       // Read file bytes
@@ -53,7 +53,7 @@ class SupabaseStorageDatasource {
     try {
       // Generate unique filename with timestamp to avoid conflicts
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = '${userId}_${timestamp}$fileExtension';
+      final fileName = '${userId}_$timestamp$fileExtension';
       final filePath = '$_avatarFolder/$userId/$fileName';
 
       // Upload to Supabase Storage

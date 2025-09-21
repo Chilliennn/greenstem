@@ -9,7 +9,6 @@ import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
 import 'core/services/background_task_service.dart';
 import 'presentation/screens/splash/splash_screen.dart';
-import 'presentation/providers/auth_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

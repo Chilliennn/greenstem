@@ -23,8 +23,6 @@ import '../../../data/datasources/remote/remote_user_datasource.dart';
 import '../../../data/datasources/remote/remote_delivery_part_datasource.dart';
 import '../../../data/datasources/remote/remote_part_datasource.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/services/network_service.dart';
-import '../../../core/utils/distance_calculator.dart';
 import '../../providers/auth_provider.dart';
 import '../../../domain/services/location_service.dart';
 import '../../../data/repositories/location_repository_impl.dart';

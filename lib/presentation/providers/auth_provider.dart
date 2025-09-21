@@ -137,7 +137,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   bool isAdmin() {
-    return state.user?.type?.toLowerCase() == "admin";
+    return state.user?.type.toLowerCase() == "admin";
   }
 
   Future<void> signOut() async {
