@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:greenstem/presentation/screens/admin/dashboard_screen.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../domain/params/sign_in_params.dart';
 import '../../providers/auth_provider.dart';
@@ -108,11 +109,30 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               !current.isLoading &&
               previous?.user == null &&
               current.errorMessage == null) {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (context) => const HomeScreen()),
-              (route) => false,
-            );
+            final userType = current.user!.type.toLowerCase();
+
+            if (userType == 'admin') {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const DashboardScreen(),
+                ),
+                (route) => false,
+              );
+            } else {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const HomeScreen()),
+                (route) => false,
+              );
+            }
+
+            final userName =
+                current.user!.firstName ?? current.user!.username ?? 'User';
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text("Welcome back, $userName!"),
+              backgroundColor: Color(0xFFFEA41E),
+            ));
           }
         });
 

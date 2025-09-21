@@ -9,6 +9,7 @@ import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
 import 'core/services/background_task_service.dart';
 import 'presentation/screens/splash/splash_screen.dart';
+import 'presentation/providers/auth_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,7 +39,6 @@ Future<void> main() async {
     }
 
     await Supabase.initialize(url: url, anonKey: key);
-
     print('Supabase initialized successfully');
   } catch (e) {
     print('Error initializing Supabase: $e');
@@ -47,7 +47,11 @@ Future<void> main() async {
   // Initialize background tasks
   BackgroundTaskService.initialize();
 
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(
+    ProviderScope(
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -80,7 +84,10 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: Theme
+            .of(context)
+            .colorScheme
+            .inversePrimary,
         title: Text(widget.title),
       ),
       body: Center(),

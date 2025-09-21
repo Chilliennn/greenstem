@@ -40,17 +40,20 @@ final signInUseCaseProvider = Provider((ref) {
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final signUpUseCase = ref.read(signUpUseCaseProvider);
   final signInUseCase = ref.read(signInUseCaseProvider);
-  return AuthNotifier(signUpUseCase, signInUseCase);
+  return AuthNotifier(signUpUseCase, signInUseCase, ref);
 });
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final SignUpUseCase _signUpUseCase;
   final SignInUseCase _signInUseCase;
+  final Ref _ref; // Add ref to access providers
   AuthStorageService? _authStorage;
 
-  AuthNotifier(this._signUpUseCase, this._signInUseCase)
+  AuthNotifier(this._signUpUseCase, this._signInUseCase, this._ref)
       : super(const AuthState()) {
     _initializeStorage();
+    // Auto-initialize auth when the notifier is created
+    Future.delayed(Duration.zero, () => initializeAuth());
   }
 
   Future<void> _initializeStorage() async {
@@ -129,6 +132,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  String? getUserType() {
+    return state.user?.type;
+  }
+
+  bool isAdmin() {
+    return state.user?.type?.toLowerCase() == "admin";
+  }
+
   Future<void> signOut() async {
     // Clear stored authentication data
     if (_authStorage != null) {
@@ -146,5 +157,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
   // Get saved username for convenience
   String? getSavedUsername() {
     return _authStorage?.getSavedUsername();
+  }
+
+  Future<void> initializeAuth() async {
+    print('AuthProvider: Initializing auth...');
+
+    try {
+      // Check if we have a current user using the correct ref
+      final userService = _ref.read(userServiceProvider);
+      final currentUser = await userService.getCurrentUser();
+
+      if (currentUser != null) {
+        print(
+            'AuthProvider: Found current user: ${currentUser.username}, type: ${currentUser.type}');
+        state = state.copyWith(user: currentUser);
+      } else {
+        print('AuthProvider: No current user found');
+      }
+    } catch (e) {
+      print('AuthProvider: Error initializing auth: $e');
+    }
   }
 }
