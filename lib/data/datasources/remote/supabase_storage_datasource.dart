@@ -5,8 +5,10 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 
 class SupabaseStorageDatasource {
-  static const String _bucketName = 'profile';
+  static const String _profileBucketName = 'profile';
+  static const String _deliveryProofsBucketName = 'delivery-proofs';
   static const String _avatarFolder = 'avatars';
+  static const String _proofsFolder = 'proofs';
 
   final SupabaseClient _client = Supabase.instance.client;
 
@@ -28,7 +30,7 @@ class SupabaseStorageDatasource {
       final bytes = await imageFile.readAsBytes();
 
       // Upload to Supabase Storage
-      await _client.storage.from(_bucketName).uploadBinary(filePath, bytes);
+      await _client.storage.from(_profileBucketName).uploadBinary(filePath, bytes);
 
       // Generate public URL with version parameter
       final publicUrl = _generatePublicUrl(filePath, userId, avatarVersion);
@@ -56,7 +58,7 @@ class SupabaseStorageDatasource {
 
       // Upload to Supabase Storage
       await _client.storage
-          .from(_bucketName)
+          .from(_profileBucketName)
           .uploadBinary(filePath, imageBytes);
 
       // Generate public URL with version parameter
@@ -79,7 +81,7 @@ class SupabaseStorageDatasource {
       // Extract the file path from the full URL if needed
       final cleanPath = _extractPathFromUrl(filePath);
 
-      await _client.storage.from(_bucketName).remove([cleanPath]);
+      await _client.storage.from(_profileBucketName).remove([cleanPath]);
 
       print('✅ Avatar deleted successfully: $cleanPath');
     } catch (e) {
@@ -108,7 +110,7 @@ class SupabaseStorageDatasource {
       try {
         // List all files in the user's folder
         final files =
-            await _client.storage.from(_bucketName).list(path: folderPath);
+            await _client.storage.from(_profileBucketName).list(path: folderPath);
 
         if (files.isNotEmpty) {
           // Extract file paths
@@ -119,7 +121,7 @@ class SupabaseStorageDatasource {
 
           if (filePaths.isNotEmpty) {
             // Delete all files at once
-            await _client.storage.from(_bucketName).remove(filePaths);
+            await _client.storage.from(_profileBucketName).remove(filePaths);
 
             print(
                 '✅ Deleted ${filePaths.length} avatar files for user $userId');
@@ -128,7 +130,7 @@ class SupabaseStorageDatasource {
             if (currentProfilePath != null && currentProfilePath.isNotEmpty) {
               try {
                 final cleanPath = _extractPathFromUrl(currentProfilePath);
-                await _client.storage.from(_bucketName).remove([cleanPath]);
+                await _client.storage.from(_profileBucketName).remove([cleanPath]);
                 print('✅ Deleted current profile path: $cleanPath');
               } catch (e) {
                 print('⚠️ Failed to delete current profile path: $e');
@@ -148,7 +150,7 @@ class SupabaseStorageDatasource {
         if (currentProfilePath != null && currentProfilePath.isNotEmpty) {
           try {
             final cleanPath = _extractPathFromUrl(currentProfilePath);
-            await _client.storage.from(_bucketName).remove([cleanPath]);
+            await _client.storage.from(_profileBucketName).remove([cleanPath]);
             print('✅ Deleted current profile path: $cleanPath');
           } catch (e) {
             print('⚠️ Failed to delete current profile path: $e');
@@ -161,9 +163,134 @@ class SupabaseStorageDatasource {
     }
   }
 
-  /// Generate public URL with version parameter to bypass CDN cache
+  /// Upload delivery proof image to Supabase Storage
+  /// Returns the public URL with version parameter
+  Future<String> uploadDeliveryProof({
+    required String deliveryId,
+    required File imageFile,
+    required String userId,
+  }) async {
+    try {
+      // Generate unique filename with timestamp to avoid conflicts
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final extension = path.extension(imageFile.path);
+      final fileName = '${deliveryId}_${timestamp}$extension';
+      final filePath = '$_proofsFolder/$deliveryId/$fileName';
+
+      // Read file bytes
+      final bytes = await imageFile.readAsBytes();
+
+      // Upload to Supabase Storage
+      await _client.storage.from(_deliveryProofsBucketName).uploadBinary(filePath, bytes);
+
+      // Generate public URL
+      final publicUrl = _generateDeliveryProofPublicUrl(filePath);
+
+      print('✅ Delivery proof uploaded successfully: $publicUrl');
+      return publicUrl;
+    } catch (e) {
+      print('❌ Failed to upload delivery proof: $e');
+      rethrow;
+    }
+  }
+
+  /// Upload delivery proof from bytes to Supabase Storage
+  Future<String> uploadDeliveryProofFromBytes({
+    required String deliveryId,
+    required Uint8List imageBytes,
+    required String fileExtension,
+    required String userId,
+  }) async {
+    try {
+      // Generate unique filename with timestamp to avoid conflicts
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = '${deliveryId}_${timestamp}$fileExtension';
+      final filePath = '$_proofsFolder/$deliveryId/$fileName';
+
+      // Upload to Supabase Storage
+      await _client.storage
+          .from(_deliveryProofsBucketName)
+          .uploadBinary(filePath, imageBytes);
+
+      // Generate public URL
+      final publicUrl = _generateDeliveryProofPublicUrl(filePath);
+
+      print('✅ Delivery proof uploaded successfully: $publicUrl');
+      return publicUrl;
+    } catch (e) {
+      print('❌ Failed to upload delivery proof: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete delivery proof from Supabase Storage
+  Future<void> deleteDeliveryProof({
+    required String deliveryId,
+    required String filePath,
+  }) async {
+    try {
+      // Extract the file path from the full URL if needed
+      final cleanPath = _extractPathFromUrl(filePath);
+
+      await _client.storage.from(_deliveryProofsBucketName).remove([cleanPath]);
+
+      print('✅ Delivery proof deleted successfully: $cleanPath');
+    } catch (e) {
+      print('❌ Failed to delete delivery proof: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete all delivery proofs for a specific delivery
+  Future<void> deleteAllDeliveryProofs(String deliveryId) async {
+    try {
+      print('🗑️ Deleting all delivery proofs for delivery: $deliveryId');
+
+      // Get all files in the delivery's proof folder
+      final folderPath = '$_proofsFolder/$deliveryId';
+
+      try {
+        // List all files in the delivery's folder
+        final files = await _client.storage
+            .from(_deliveryProofsBucketName)
+            .list(path: folderPath);
+
+        if (files.isNotEmpty) {
+          // Extract file paths
+          final filePaths = files
+              .where((file) => file.name != null)
+              .map((file) => '$folderPath/${file.name}')
+              .toList();
+
+          if (filePaths.isNotEmpty) {
+            // Delete all files at once
+            await _client.storage.from(_deliveryProofsBucketName).remove(filePaths);
+
+            print(
+                '✅ Deleted ${filePaths.length} delivery proof files for delivery $deliveryId');
+          } else {
+            print('ℹ️ No delivery proof files found for delivery $deliveryId');
+          }
+        } else {
+          print('ℹ️ No delivery proof files found for delivery $deliveryId');
+        }
+      } catch (listError) {
+        print('⚠️ Failed to list delivery proof files: $listError');
+      }
+    } catch (e) {
+      print('❌ Failed to delete delivery proofs: $e');
+      rethrow;
+    }
+  }
+
+  /// Generate public URL for delivery proof
+  String _generateDeliveryProofPublicUrl(String filePath) {
+    return _client.storage.from(_deliveryProofsBucketName).getPublicUrl(filePath);
+  }
+
+  /// Generate public URL with version parameter to bypass CDN cache (for avatars)
   String _generatePublicUrl(String filePath, String userId, int avatarVersion) {
-    final baseUrl = _client.storage.from(_bucketName).getPublicUrl(filePath);
+    final baseUrl = _client.storage.from(_profileBucketName).getPublicUrl(filePath);
     // Add version parameter to bypass CDN cache
     return '$baseUrl?v=${userId}_$avatarVersion';
   }
@@ -178,7 +305,11 @@ class SupabaseStorageDatasource {
     final pathSegments = uri.pathSegments;
 
     // Find the bucket name and extract everything after it
-    final bucketIndex = pathSegments.indexOf(_bucketName);
+    int bucketIndex = pathSegments.indexOf(_profileBucketName);
+    if (bucketIndex == -1) {
+      bucketIndex = pathSegments.indexOf(_deliveryProofsBucketName);
+    }
+
     if (bucketIndex != -1 && bucketIndex < pathSegments.length - 1) {
       return pathSegments.sublist(bucketIndex + 1).join('/');
     }
@@ -203,12 +334,21 @@ class SupabaseStorageDatasource {
     }
   }
 
-  /// Get the base URL for the storage bucket
-  String get baseUrl => _client.storage.from(_bucketName).getPublicUrl('');
+  /// Get the base URL for the profile storage bucket
+  String get profileBaseUrl => _client.storage.from(_profileBucketName).getPublicUrl('');
 
-  /// Get the bucket name
-  String get bucketName => _bucketName;
+  /// Get the base URL for the delivery proofs storage bucket
+  String get deliveryProofsBaseUrl => _client.storage.from(_deliveryProofsBucketName).getPublicUrl('');
+
+  /// Get the profile bucket name
+  String get profileBucketName => _profileBucketName;
+
+  /// Get the delivery proofs bucket name
+  String get deliveryProofsBucketName => _deliveryProofsBucketName;
 
   /// Get the avatar folder name
   String get avatarFolder => _avatarFolder;
+
+  /// Get the proofs folder name
+  String get proofsFolder => _proofsFolder;
 }
