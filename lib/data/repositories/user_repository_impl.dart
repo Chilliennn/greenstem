@@ -210,57 +210,58 @@ class UserRepositoryImpl implements UserRepository {
 
   @override
   Future<User?> login(String username, String password) async {
-  try {
-    // Check network connection first
-    final hasNetwork = await hasNetworkConnection();
-    
-    if (hasNetwork) {
-      try {
-        // Add timeout to remote login to prevent long waits
-        final remoteUser = await _remoteDataSource.login(username, password)
-            .timeout(const Duration(seconds: 10));
-        
-        if (remoteUser != null) {
-          // Save user locally and mark as current user
-          final localUser = remoteUser.copyWith(
-            isSynced: true,
-            needsSync: false,
-            isCurrentUser: true,
-          );
-          await _localDataSource.insertOrUpdateUser(localUser);
-          await _localDataSource.setCurrentUser(remoteUser.userId);
-          return localUser.toEntity().toPublicUser();
+    try {
+      // Check network connection first
+      final hasNetwork = await hasNetworkConnection();
+
+      if (hasNetwork) {
+        try {
+          // Add timeout to remote login to prevent long waits
+          final remoteUser = await _remoteDataSource
+              .login(username, password)
+              .timeout(const Duration(seconds: 10));
+
+          if (remoteUser != null) {
+            // Save user locally and mark as current user
+            final localUser = remoteUser.copyWith(
+              isSynced: true,
+              needsSync: false,
+              isCurrentUser: true,
+            );
+            await _localDataSource.insertOrUpdateUser(localUser);
+            await _localDataSource.setCurrentUser(remoteUser.userId);
+            return localUser.toEntity().toPublicUser();
+          }
+        } catch (e) {
+          print('❌ Remote login failed: $e');
+          // Continue to local login even if remote fails
         }
-      } catch (e) {
-        print('❌ Remote login failed: $e');
-        // Continue to local login even if remote fails
-      }
-    } else {
-      print('📱 No network connection, skipping remote login');
-    }
-
-    // Fallback to local login if remote fails or no network
-    final localUser = await _localDataSource.getUserByUsername(username);
-
-    if (localUser != null) {
-      if (localUser.password == password) {
-        await _localDataSource.setCurrentUser(localUser.userId);
-        print('✅ Local login successful');
-        return localUser.toEntity().toPublicUser();
       } else {
-        print('❌ Password mismatch');
+        print('📱 No network connection, skipping remote login');
       }
-    } else {
-      print('❌ User not found in local database');
-    }
 
-    print('❌ Login failed - no matching user or wrong password');
-    return null;
-  } catch (e) {
-    print('❌ Login error: $e');
-    throw Exception('Login failed: $e');
+      // Fallback to local login if remote fails or no network
+      final localUser = await _localDataSource.getUserByUsername(username);
+
+      if (localUser != null) {
+        if (localUser.password == password) {
+          await _localDataSource.setCurrentUser(localUser.userId);
+          print('✅ Local login successful');
+          return localUser.toEntity().toPublicUser();
+        } else {
+          print('❌ Password mismatch');
+        }
+      } else {
+        print('❌ User not found in local database');
+      }
+
+      print('❌ Login failed - no matching user or wrong password');
+      return null;
+    } catch (e) {
+      print('❌ Login error: $e');
+      throw Exception('Login failed: $e');
+    }
   }
-}
 
   @override
   Future<User> register(User user) async {
