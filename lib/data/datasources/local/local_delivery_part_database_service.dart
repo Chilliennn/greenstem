@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:greenstem/domain/entities/delivery_part.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../models/delivery_part_model.dart';
 import 'database_manager.dart';

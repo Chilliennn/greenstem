@@ -375,7 +375,7 @@ class _StatusCard extends StatelessWidget {
   final Color color;
   final Delivery? delivery;
   final DeliveryService? deliveryService;
-  final Function(Delivery)? onDeliveryUpdated;
+  final Function(Delivery)? onDeliveryUpdated = null;
 
 
   const _StatusCard({
@@ -383,7 +383,6 @@ class _StatusCard extends StatelessWidget {
     required this.color,
     this.delivery,
     this.deliveryService,
-    this.onDeliveryUpdated,
   });
 
 

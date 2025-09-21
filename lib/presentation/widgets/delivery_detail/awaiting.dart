@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart'; 
 import '../../../domain/entities/delivery.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/entities/delivery_part.dart';
 import '../../../domain/entities/part.dart';
+import '../../../domain/entities/location.dart';
 import '../../../domain/services/delivery_service.dart';
 import '../../../domain/services/user_service.dart';
 import '../../../domain/services/delivery_part_service.dart';
@@ -43,6 +45,7 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
   late final DeliveryPartService _deliveryPartService;
   late final PartService _partService;
   late final LocationService _locationService;
+  late final _url = "https://www.poslaju.com.my"; 
 
   bool _isUpdating = false;
   bool _isLoadingParts = true;
@@ -66,7 +69,6 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
     final localDeliveryDataSource = LocalDeliveryDatabaseService();
     final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
     final deliveryRepository = DeliveryRepositoryImpl(localDeliveryDataSource, remoteDeliveryDataSource);
-    _deliveryService = DeliveryService(deliveryRepository);
 
     // Initialize user services
     final localUserDataSource = LocalUserDatabaseService();
@@ -91,6 +93,8 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
     final remoteLocationDataSource = SupabaseLocationDataSource();
     final locationRepository = LocationRepositoryImpl(localLocationDataSource, remoteLocationDataSource);
     _locationService = LocationService(locationRepository);
+
+    _deliveryService = DeliveryService(deliveryRepository, deliveryPartRepository, locationRepository);
   }
 
   Future<void> _loadCurrentUser() async {
@@ -228,6 +232,14 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
     );
   }
 
+  Future<void> launchMyUrl(String url) async {
+    final Uri uri = Uri.parse(url);
+
+    if (!await launchUrl(uri)) {
+      throw Exception('Could not launch $uri');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_currentDelivery == null) {
@@ -323,12 +335,12 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
                               ),
                             ),
                             const SizedBox(height: 6),
-                            FutureBuilder<String>(
-                              future: _locationService
-                                  .getLocationName(delivery.pickupLocation),
+                            StreamBuilder<Location?>(
+                              stream: _locationService.watchLocationById(delivery.pickupLocation!),
                               builder: (context, snapshot) {
+                                final location = snapshot.data;
                                 return Text(
-                                  snapshot.data ?? 'Unknown',
+                                  location?.name ?? 'Unknown',
                                   style: const TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold,
@@ -576,7 +588,6 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        // Parts rows from database
                         ..._deliveryParts.map((part) => _buildPartRow(part)),
                         const SizedBox(height: 16),
                         Divider(color: Colors.grey.shade600),
@@ -670,13 +681,8 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
 
             // Contact Button
             OutlinedButton.icon(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Contact feature coming soon'),
-                    backgroundColor: AppColors.cyellow,
-                  ),
-                );
+              onPressed: () async {
+                launchMyUrl(_url);
               },
               icon: const Icon(Icons.call, color: Colors.white),
               label: const Text(

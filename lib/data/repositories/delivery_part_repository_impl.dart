@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:uuid/uuid.dart';
 import '../../domain/entities/delivery_part.dart';
 import '../../domain/repositories/delivery_part_repository.dart';
 import '../datasources/local/local_delivery_part_database_service.dart';
