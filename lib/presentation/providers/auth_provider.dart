@@ -142,11 +142,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> signOut() async {
     // Clear stored authentication data
+    try {
+      final userService = _ref.read(userServiceProvider);
+      await userService.clearCurrentUser();
+    } catch (e) {
+      print('AuthProvider: Error clearing current user: $e');
+    }
+
     if (_authStorage != null) {
       await _authStorage!.clearAuthData();
     }
 
-    state = const AuthState();
+    state = state.copyWith(
+      isLoading: false,
+      user: null,
+      errorMessage: null,
+      clearUser: true,
+    );
+
   }
 
   // Get remember me status

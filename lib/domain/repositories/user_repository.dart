@@ -57,4 +57,6 @@ abstract class UserRepository {
   Future<List<User>> getCachedUsers();
 
   Future<void> clearCache();
+
+  Future<void> clearCurrentUser();
 }

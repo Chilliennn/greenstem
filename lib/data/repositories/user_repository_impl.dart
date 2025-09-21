@@ -600,6 +600,17 @@ class UserRepositoryImpl implements UserRepository {
     }
   }
 
+  @override
+  Future<void> clearCurrentUser() async {
+    try {
+      await _localDataSource.clearCurrentUser();
+      print('✅ Cleared current user from local database');
+    } catch (e) {
+      print('❌ Error clearing current user: $e');
+      throw Exception('Failed to clear current user: $e');
+    }
+  }
+
   void dispose() {
     _disposed = true;
     _syncTimer?.cancel();
