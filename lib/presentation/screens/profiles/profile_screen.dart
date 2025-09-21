@@ -9,6 +9,7 @@ import '../../providers/auth_provider.dart';
 import '../auth/sign_in_screen.dart';
 import 'edit_profile_screen.dart';
 import '../profiles/update_password_screen.dart';
+import '../../widgets/common/offline_avatar.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -162,17 +163,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     width: 2,
                   ),
                 ),
-                child: CircleAvatar(
+                child: OfflineAvatar(
+                  user: user,
                   radius: 58,
                   backgroundColor: AppColors.clightgray,
-                  backgroundImage: _getProfileImage(user),
-                  child: _getProfileImage(user) == null
-                      ? Icon(
-                          Icons.person,
-                          size: 60,
-                          color: Colors.white.withOpacity(0.7),
-                        )
-                      : null,
+                  child: Icon(
+                    Icons.person,
+                    size: 60,
+                    color: Colors.white.withOpacity(0.7),
+                  ),
                 ),
               ),
               Positioned(
@@ -589,28 +588,5 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         backgroundColor: AppColors.cyellow,
       ),
     );
-  }
-
-  ImageProvider? _getProfileImage(User user) {
-    // Use the new ImageUploadService to get the best available image
-    // This will handle local cache, remote download, and default fallback
-    if (user.profilePath == null || user.profilePath!.isEmpty) {
-      return null;
-    }
-
-    // For local files, check if they exist
-    if (user.profilePath!.startsWith('/')) {
-      final File imageFile = File(user.profilePath!);
-      if (imageFile.existsSync()) {
-        return FileImage(imageFile);
-      }
-    }
-
-    // For remote URLs, use NetworkImage
-    if (user.profilePath!.startsWith('http')) {
-      return NetworkImage(user.profilePath!);
-    }
-
-    return null;
   }
 }
