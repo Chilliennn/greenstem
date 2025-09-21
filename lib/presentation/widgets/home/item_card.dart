@@ -7,6 +7,7 @@ import '../../../presentation/widgets/delivery_detail/picked_up.dart';
 import '../../../presentation/screens/delivery_detail/delivery_detail_screen.dart';
 import '../../../presentation/widgets/delivery_detail/awaiting.dart';
 import '../../../presentation/widgets/delivery_detail/en_route.dart';
+import '../../../presentation/widgets/delivery_detail/delivered.dart';
 
 
 _setUseApi() => false;
@@ -445,6 +446,14 @@ class _StatusCard extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (context) => EnRoutePage(delivery: delivery!),
+                ),
+              );
+            } else if (label == "Delivered") {
+              // Add navigation to DeliveredPage
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => DeliveredPage(delivery: delivery!),
                 ),
               );
             } else {
