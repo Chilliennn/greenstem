@@ -12,6 +12,7 @@ class User {
   final DateTime createdAt;
   final DateTime? updatedAt;
   final int avatarVersion;
+  final String type;
 
   const User({
     required this.userId,
@@ -27,6 +28,7 @@ class User {
     required this.createdAt,
     this.updatedAt,
     this.avatarVersion = 0,
+    this.type = "antidisestablishmentarianism",
   });
 
   User copyWith({
@@ -43,6 +45,7 @@ class User {
     DateTime? createdAt,
     DateTime? updatedAt,
     int? avatarVersion,
+    String? type,
   }) {
     return User(
       userId: userId ?? this.userId,
@@ -58,6 +61,7 @@ class User {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       avatarVersion: avatarVersion ?? this.avatarVersion,
+      type: type ?? this.type,
     );
   }
 
@@ -81,6 +85,8 @@ class User {
   String get fullName => '$firstName $lastName';
 
   String get displayName => username ?? email ?? 'Unknown User';
+
+  String get getType => type;
 
   int? get age {
     if (birthDate == null) return null;

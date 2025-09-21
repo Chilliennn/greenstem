@@ -18,6 +18,7 @@ class UserModel {
   final bool isCurrentUser;
   final int version; // Add version for LWW
   final int avatarVersion;
+  final String type;
 
   const UserModel({
     required this.userId,
@@ -37,6 +38,7 @@ class UserModel {
     this.isCurrentUser = false,
     this.version = 1,
     this.avatarVersion = 0,
+    this.type = "antidisestablishmentarianism",
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -60,6 +62,7 @@ class UserModel {
       isCurrentUser: (json['is_current_user'] as int?) == 1,
       version: (json['version'] as int?) ?? 1,
       avatarVersion: (json['avatar_version'] as int?) ?? 0,
+      type: json['type'] as String,
     );
   }
 
@@ -85,6 +88,7 @@ class UserModel {
       isCurrentUser: false,
       version: (json['version'] as int?) ?? 1,
       avatarVersion: (json['avatar_version'] as int?) ?? 0,
+      type: json['type'] as String,
     );
   }
 
@@ -107,6 +111,7 @@ class UserModel {
       'is_current_user': isCurrentUser ? 1 : 0,
       'version': version,
       'avatar_version': avatarVersion,
+      'type': type,
     };
   }
 
@@ -137,6 +142,7 @@ class UserModel {
     bool? isCurrentUser,
     int? version,
     int? avatarVersion,
+    String? type,
   }) {
     return UserModel(
       userId: userId ?? this.userId,
@@ -156,6 +162,7 @@ class UserModel {
       isCurrentUser: isCurrentUser ?? this.isCurrentUser,
       version: version ?? this.version,
       avatarVersion: avatarVersion ?? this.avatarVersion,
+      type: type ?? this.type,
     );
   }
 
@@ -181,6 +188,7 @@ class UserModel {
       createdAt: createdAt,
       updatedAt: updatedAt,
       avatarVersion: avatarVersion,
+      type: type,
     );
   }
 
@@ -209,6 +217,7 @@ class UserModel {
       isCurrentUser: isCurrentUser ?? false,
       version: version ?? 1,
       avatarVersion: entity.avatarVersion,
+      type: entity.type,
     );
   }
 
