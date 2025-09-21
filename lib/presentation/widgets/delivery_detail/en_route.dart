@@ -40,14 +40,14 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
   late final DeliveryPartService _deliveryPartService;
   late final PartService _partService;
   
-  bool _isUpdating = false;
+  final bool _isUpdating = false;
   bool _isLoadingParts = true;
   bool _isUploading = false;
   Delivery? _currentDelivery;
   User? _currentUser;
   List<DeliveryPart> _deliveryParts = [];
   Map<String, Part?> _partsMap = {};
-  List<String> _proofImages = [];
+  final List<String> _proofImages = [];
   String? _errorMessage;
 
   @override
@@ -196,7 +196,7 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
 
       final result = await _deliveryService.updateDelivery(updatedDelivery);
 
-      if (result != null && mounted) {
+      if (mounted) {
         setState(() {
           _currentDelivery = result;
         });

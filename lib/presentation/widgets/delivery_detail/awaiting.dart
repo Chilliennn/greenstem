@@ -164,7 +164,7 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
       );
       final result = await _deliveryService.updateDelivery(updatedDelivery);
 
-      if (result != null && mounted) {
+      if (mounted) {
         setState(() {
           _currentDelivery = result;
         });
@@ -231,7 +231,7 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
       );
       final result = await _deliveryService.updateDelivery(updatedDelivery);
 
-      if (result != null && mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Delivery rejected'),

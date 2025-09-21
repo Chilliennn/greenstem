@@ -7,8 +7,6 @@ import 'package:greenstem/data/datasources/local/local_location_database_service
 import 'package:greenstem/data/datasources/remote/remote_delivery_part_datasource.dart';
 import 'package:greenstem/data/datasources/remote/remote_location_datasource.dart';
 import 'package:greenstem/data/repositories/location_repository_impl.dart';
-import 'package:greenstem/domain/entities/delivery.dart';
-import 'package:greenstem/domain/services/location_service.dart';
 import '../../../data/repositories/delivery_part_repository_impl.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/services/delivery_service.dart';

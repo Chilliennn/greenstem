@@ -381,8 +381,7 @@ class _StatusCard extends StatelessWidget {
     required this.label,
     required this.color,
     this.delivery,
-    this.deliveryService,
-    this.onDeliveryUpdated,
+    this.deliveryService, this.onDeliveryUpdated,
   });
 
 

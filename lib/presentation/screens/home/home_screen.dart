@@ -8,7 +8,6 @@ import 'package:greenstem/data/datasources/remote/remote_delivery_part_datasourc
 import 'package:greenstem/data/datasources/remote/remote_location_datasource.dart';
 import 'package:greenstem/data/repositories/location_repository_impl.dart';
 import 'package:greenstem/domain/entities/delivery.dart';
-import 'package:greenstem/domain/services/location_service.dart';
 import '../../../data/repositories/delivery_part_repository_impl.dart';
 import '../../../presentation/widgets/home/active_tab.dart';
 import '../../../presentation/widgets/home/history_tab.dart';
