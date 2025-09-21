@@ -250,3 +250,40 @@ class ImageUploadService {
     return await _cacheService.getCacheStats();
   }
 }
+
+class ProofImageUploadService {
+  static final SupabaseStorageService _storageService = SupabaseStorageService();
+  static final ImageCacheService _cacheService = ImageCacheService();
+  
+  /// Save proof image both locally and remotely
+  static Future<String> saveProofImage({
+    required File imageFile,
+    required String deliveryId,
+    required int proofImageVersion,
+  }) async {
+    try {
+      // Read image bytes
+      final imageBytes = await imageFile.readAsBytes();
+      
+      // Save to local cache with delivery-specific naming
+      final localPath = await _cacheService.saveToCache(
+        userId: 'delivery_$deliveryId',
+        avatarVersion: proofImageVersion,
+        imageBytes: imageBytes,
+      );
+      
+      // Upload to Supabase Storage under 'proof-images' bucket
+      final remoteUrl = await _storageService.uploadAvatarFromBytes(
+        userId: 'delivery_$deliveryId',
+        imageBytes: imageBytes,
+        avatarVersion: proofImageVersion,
+        fileExtension: path.extension(imageFile.path),
+      );
+      
+      return remoteUrl;
+    } catch (e) {
+      print('❌ Failed to save proof image: $e');
+      rethrow;
+    }
+  }
+}

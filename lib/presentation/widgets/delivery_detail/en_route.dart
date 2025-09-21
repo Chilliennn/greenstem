@@ -2,27 +2,37 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as path_utils;
+import 'package:path_provider/path_provider.dart';
+import '../../../core/services/image_upload_service.dart';
+import '../../../core/services/proof_image_service.dart';
 import '../../../domain/entities/delivery.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/entities/delivery_part.dart';
 import '../../../domain/entities/part.dart';
+import '../../../domain/entities/location.dart';
 import '../../../domain/services/delivery_service.dart';
 import '../../../domain/services/user_service.dart';
 import '../../../domain/services/delivery_part_service.dart';
 import '../../../domain/services/part_service.dart';
+import '../../../domain/services/location_service.dart';
 import '../../../data/repositories/delivery_repository_impl.dart';
 import '../../../data/repositories/user_repository_impl.dart';
 import '../../../data/repositories/delivery_part_repository_impl.dart';
 import '../../../data/repositories/part_repository_impl.dart';
+import '../../../data/repositories/location_repository_impl.dart';
 import '../../../data/datasources/local/local_delivery_database_service.dart';
 import '../../../data/datasources/local/local_user_database_service.dart';
 import '../../../data/datasources/local/local_delivery_part_database_service.dart';
 import '../../../data/datasources/local/local_part_database_service.dart';
+import '../../../data/datasources/local/local_location_database_service.dart';
 import '../../../data/datasources/remote/remote_delivery_datasource.dart';
 import '../../../data/datasources/remote/remote_user_datasource.dart';
 import '../../../data/datasources/remote/remote_delivery_part_datasource.dart';
 import '../../../data/datasources/remote/remote_part_datasource.dart';
+import '../../../data/datasources/remote/remote_location_datasource.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/distance_calculator.dart';
 import '../../providers/auth_provider.dart';
 
 class EnRoutePage extends ConsumerStatefulWidget {
@@ -39,9 +49,10 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
   late final UserService _userService;
   late final DeliveryPartService _deliveryPartService;
   late final PartService _partService;
+  late final LocationService _locationService;
   
-  bool _isUpdating = false;
   bool _isLoadingParts = true;
+  bool _isLoadingLocations = true;
   bool _isUploading = false;
   Delivery? _currentDelivery;
   User? _currentUser;
@@ -49,6 +60,11 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
   Map<String, Part?> _partsMap = {};
   List<String> _proofImages = [];
   String? _errorMessage;
+  
+  Location? _pickupLocation;
+  Location? _deliveryLocation;
+  String _distanceText = 'Calculating...';
+  String _durationText = '';
 
   @override
   void initState() {
@@ -57,32 +73,109 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
     _initializeServices();
     _loadCurrentUser();
     _loadDeliveryParts();
+    _loadLocations();
+    _calculateDistance();
   }
 
   void _initializeServices() {
-    // Initialize delivery services
     final localDeliveryDataSource = LocalDeliveryDatabaseService();
-    final remoteDeliveryDataSource = SupabaseDeliveryDataSource(); // This should be the concrete implementation
+    final remoteDeliveryDataSource = SupabaseDeliveryDataSource();
     final deliveryRepository = DeliveryRepositoryImpl(localDeliveryDataSource, remoteDeliveryDataSource);
     _deliveryService = DeliveryService(deliveryRepository);
 
-    // Initialize user services
     final localUserDataSource = LocalUserDatabaseService();
-    final remoteUserDataSource = SupabaseUserDataSource(); // This should be the concrete implementation
+    final remoteUserDataSource = SupabaseUserDataSource();
     final userRepository = UserRepositoryImpl(localUserDataSource, remoteUserDataSource);
     _userService = UserService(userRepository);
 
-    // Initialize delivery part services
     final localDeliveryPartDataSource = LocalDeliveryPartDatabaseService();
-    final remoteDeliveryPartDataSource = SupabaseDeliveryPartDataSource(); // This should be the concrete implementation
+    final remoteDeliveryPartDataSource = SupabaseDeliveryPartDataSource();
     final deliveryPartRepository = DeliveryPartRepositoryImpl(localDeliveryPartDataSource, remoteDeliveryPartDataSource);
     _deliveryPartService = DeliveryPartService(deliveryPartRepository);
 
-    // Initialize part services
     final localPartDataSource = LocalPartDatabaseService();
-    final remotePartDataSource = SupabasePartDataSource(); // This should be the concrete implementation
+    final remotePartDataSource = SupabasePartDataSource();
     final partRepository = PartRepositoryImpl(localPartDataSource, remotePartDataSource);
     _partService = PartService(partRepository);
+
+    final localLocationDataSource = LocalLocationDatabaseService();
+    final remoteLocationDataSource = SupabaseLocationDataSource();
+    final locationRepository = LocationRepositoryImpl(localLocationDataSource, remoteLocationDataSource);
+    _locationService = LocationService(locationRepository);
+  }
+
+  Future<void> _loadLocations() async {
+    if (_currentDelivery == null) return;
+
+    setState(() => _isLoadingLocations = true);
+
+    try {
+      if (_currentDelivery!.pickupLocation != null) {
+        _pickupLocation = await _locationService.watchLocationById(_currentDelivery!.pickupLocation!).first;
+      }
+      
+      if (_currentDelivery!.deliveryLocation != null) {
+        _deliveryLocation = await _locationService.watchLocationById(_currentDelivery!.deliveryLocation!).first;
+      }
+
+      if (mounted) {
+        setState(() => _isLoadingLocations = false);
+      }
+    } catch (e) {
+      print('Error loading locations: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingLocations = false;
+          _errorMessage = 'Failed to load location data';
+        });
+      }
+    }
+  }
+
+  Future<void> _calculateDistance() async {
+    if (_pickupLocation?.latitude == null || 
+        _pickupLocation?.longitude == null ||
+        _deliveryLocation?.latitude == null ||
+        _deliveryLocation?.longitude == null) {
+      setState(() {
+        _distanceText = 'n/a';
+        _durationText = 'n/a';
+      });
+      return;
+    }
+
+    try {
+      final distance = await DistanceCalculator.calculateDistance(
+        _pickupLocation!.latitude,
+        _pickupLocation!.longitude,
+        _deliveryLocation!.latitude,
+        _deliveryLocation!.longitude,
+        useApi: true,
+      );
+
+      if (distance != null && mounted) {
+        final durationHours = distance / 50.0;
+        final hours = durationHours.floor();
+        final minutes = ((durationHours - hours) * 60).round();
+        
+        String durationStr = '';
+        if (hours > 0) {
+          durationStr = '${hours}hr ';
+        }
+        durationStr += '${minutes} min';
+
+        setState(() {
+          _distanceText = DistanceCalculator.formatDistance(distance);
+          _durationText = durationStr;
+        });
+      }
+    } catch (e) {
+      print('Error calculating distance: $e');
+      setState(() {
+        _distanceText = 'n/a';
+        _durationText = 'n/a';
+      });
+    }
   }
 
   Future<void> _loadCurrentUser() async {
@@ -144,115 +237,13 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
     }
   }
 
-  Future<void> _pickProofImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.camera,
-      maxWidth: 1920,
-      maxHeight: 1080,
-      imageQuality: 85,
-    );
-
-    if (pickedFile != null) {
-      setState(() {
-        _proofImages.add(pickedFile.path);
-      });
-    }
-  }
-
-  Future<void> _removeProofImage(int index) async {
-    setState(() {
-      _proofImages.removeAt(index);
-    });
-  }
-
-  Future<void> _confirmDelivery() async {
-    if (_currentDelivery == null) return;
-
-    if (_proofImages.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please capture at least one proof of delivery image.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isUploading = true);
-
-    try {
-      String? proofImagePath;
-      if (_proofImages.isNotEmpty) {
-        proofImagePath = _proofImages.first;
-      }
-
-      final updatedDelivery = _currentDelivery!.copyWith(
-        status: 'delivered',
-        updatedAt: DateTime.now(),
-        deliveredTime: DateTime.now(),
-        proofImgPath: proofImagePath,
-      );
-
-      final result = await _deliveryService.updateDelivery(updatedDelivery);
-
-      if (result != null && mounted) {
-        setState(() {
-          _currentDelivery = result;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Delivery confirmed successfully!'),
-            backgroundColor: AppColors.cyellow,
-          ),
-        );
-
-        Navigator.of(context).pop();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to confirm delivery: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isUploading = false);
-      }
-    }
-  }
-
   String _formatDateTime(DateTime? dt) {
     if (dt == null) return '-';
     return '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
-  String _formatTime(DateTime? dt) {
-    if (dt == null) return '-';
-    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-  }
-
-  double _calculateProgress() {
-    if (_currentDelivery == null) return 0.1;
-    
-    switch (_currentDelivery!.status?.toLowerCase()) {
-      case 'pending':
-        return 0.1;
-      case 'awaiting':
-        return 0.3;
-      case 'picked up':
-        return 0.5;
-      case 'en route':
-        return 0.8;
-      case 'delivered':
-        return 1.0;
-      default:
-        return 0.1;
-    }
+  int _getTotalItems() {
+    return _deliveryParts.fold<int>(0, (sum, part) => sum + (part.quantity ?? 0));
   }
 
   ImageProvider? _getProfileImage(User user) {
@@ -269,6 +260,113 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
     }
 
     return null;
+  }
+
+  ImageProvider? _getProofImage(Delivery delivery) {
+    if (delivery.proofImgPath == null || delivery.proofImgPath!.isEmpty) {
+      return null;
+    }
+
+    // Try local file first
+    if (delivery.proofImgPath!.startsWith('/')) {
+      final File imageFile = File(delivery.proofImgPath!);
+      if (imageFile.existsSync()) {
+        return FileImage(imageFile);
+      }
+    }
+
+    // Fallback to network image
+    if (delivery.proofImgPath!.startsWith('http')) {
+      return NetworkImage(delivery.proofImgPath!);
+    }
+
+    return null;
+  }
+
+  Future<void> _pickProofImage() async {
+    final imageFile = await ProofImageService.pickProofImage();
+    
+    if (imageFile != null) {
+      setState(() {
+        _proofImages.add(imageFile.path);
+      });
+    }
+  }
+
+  Future<String?> _storeProofImage(String tempImagePath) async {
+    try {
+      final proofVersion = DateTime.now().millisecondsSinceEpoch;
+      
+      // Use the new ProofImageService
+      final remoteUrl = await ProofImageService.saveProofImageBoth(
+        imageFile: File(tempImagePath),
+        deliveryId: _currentDelivery!.deliveryId,
+        proofVersion: proofVersion,
+      );
+      
+      print('✅ Proof image stored successfully: $remoteUrl');
+      return remoteUrl;
+      
+    } catch (e) {
+      print('❌ Error storing proof image: $e');
+      return null;
+    }
+  }
+
+  Future<void> _confirmDelivery() async {
+    if (_currentDelivery == null) return;
+
+    if (_proofImages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please take a proof photo before confirming delivery'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isUploading = true);
+
+    try {
+      String? finalImagePath;
+      
+      if (_proofImages.isNotEmpty) {
+        finalImagePath = await _storeProofImage(_proofImages.first);
+      }
+
+      final updatedDelivery = _currentDelivery!.copyWith(
+        status: 'delivered',
+        updatedAt: DateTime.now(),
+        deliveredTime: DateTime.now(),
+        proofImgPath: finalImagePath, // Store remote URL in database
+      );
+
+      final result = await _deliveryService.updateDelivery(updatedDelivery);
+
+      if (result != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Delivery confirmed successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to confirm delivery: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUploading = false);
+      }
+    }
   }
 
   @override
@@ -288,7 +386,6 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
     }
 
     final delivery = _currentDelivery!;
-    final progress = _calculateProgress();
 
     return Scaffold(
       backgroundColor: AppColors.cblack,
@@ -303,14 +400,17 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
           children: [
             const Text(
               'En Route',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold),
             ),
             const SizedBox(width: 8),
             Text(
               delivery.deliveryId.length > 8
                   ? delivery.deliveryId.substring(0, 8).toUpperCase()
                   : delivery.deliveryId.toUpperCase(),
-              style: const TextStyle(color: Color(0xFF4B97FA), fontSize: 16),
+              style: const TextStyle(color: Colors.purple, fontSize: 16),
             ),
           ],
         ),
@@ -320,12 +420,15 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
             child: CircleAvatar(
               radius: 18,
               backgroundColor: Colors.grey.shade300,
-              backgroundImage: _currentUser != null ? _getProfileImage(_currentUser!) : null,
-              child: _currentUser != null && _getProfileImage(_currentUser!) == null
+              backgroundImage:
+              _currentUser != null ? _getProfileImage(_currentUser!) : null,
+              child: _currentUser != null &&
+                  _getProfileImage(_currentUser!) == null
                   ? (_currentUser!.username?.isNotEmpty == true
                   ? Text(
                 _currentUser!.username![0].toUpperCase(),
-                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    color: Colors.black, fontWeight: FontWeight.bold),
               )
                   : const Icon(Icons.person, color: Colors.black, size: 20))
                   : null,
@@ -361,18 +464,33 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                               ),
                             ),
                             const SizedBox(height: 6),
-                            Text(
-                              delivery.pickupLocation ?? 'STORAGE',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
+                            FutureBuilder<String>(
+                              future: _locationService
+                                  .getLocationName(delivery.pickupLocation),
+                              builder: (context, snapshot) {
+                                return Text(
+                                  snapshot.data ?? 'Unknown',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                );
+                              },
                             ),
                             const SizedBox(height: 4),
-                            Text(
-                              'Storage B',
-                              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                            FutureBuilder<String>(
+                              future: _locationService
+                                  .getLocationAddress(delivery.pickupLocation),
+                              builder: (context, snapshot) {
+                                return Text(
+                                  snapshot.data ?? 'No address available',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontSize: 14,
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -390,20 +508,35 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                               ),
                             ),
                             const SizedBox(height: 6),
-                            Text(
-                              delivery.deliveryLocation ?? 'BAY 1B',
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
+                            FutureBuilder<String>(
+                              future: _locationService
+                                  .getLocationName(delivery.deliveryLocation),
+                              builder: (context, snapshot) {
+                                return Text(
+                                  snapshot.data ?? 'Unknown',
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                );
+                              },
                             ),
                             const SizedBox(height: 4),
-                            Text(
-                              'Service Bay',
-                              textAlign: TextAlign.right,
-                              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                            FutureBuilder<String>(
+                              future: _locationService.getLocationAddress(
+                                  delivery.deliveryLocation),
+                              builder: (context, snapshot) {
+                                return Text(
+                                  snapshot.data ?? 'No address available',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontSize: 14,
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -419,7 +552,7 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF4B97FA),
+                            color: Colors.purple,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Icon(
@@ -437,12 +570,14 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '0.1 km • 5 min',
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                        '$_distanceText • $_durationText',
+                        style: TextStyle(
+                            color: Colors.grey.shade400, fontSize: 14),
                       ),
                       Text(
                         'Due: ${_formatDateTime(delivery.dueDatetime)}',
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                        style: TextStyle(
+                            color: Colors.grey.shade400, fontSize: 14),
                       ),
                     ],
                   ),
@@ -452,80 +587,30 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
 
             const SizedBox(height: 16),
 
-            // Progress and Times Card
+            // Stats Section
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: const Color(0xFF1D1D1D),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Column(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  Row(
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Picked up at',
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _formatTime(delivery.pickupTime),
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Actual',
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                      const Spacer(),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            'ETA',
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _formatTime(delivery.dueDatetime),
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Estimated',
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ],
+                  _buildStatItem(
+                    icon: Icons.location_on,
+                    label: 'Distance',
+                    value: _distanceText,
                   ),
-                  const SizedBox(height: 20),
-                  LinearProgressIndicator(
-                    value: progress,
-                    backgroundColor: Colors.grey.shade700,
-                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4B97FA)),
-                    minHeight: 6,
+                  _buildStatItem(
+                    icon: Icons.access_time,
+                    label: 'Time',
+                    value: _durationText,
                   ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      '${(progress * 100).toInt()}%',
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                    ),
+                  _buildStatItem(
+                    icon: Icons.inventory,
+                    label: 'Items',
+                    value: '${_getTotalItems()}',
                   ),
                 ],
               ),
@@ -557,7 +642,8 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                       child: Padding(
                         padding: EdgeInsets.all(20),
                         child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4B97FA)),
+                          valueColor:
+                          AlwaysStoppedAnimation<Color>(Colors.purple),
                         ),
                       ),
                     )
@@ -567,7 +653,8 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                         padding: const EdgeInsets.all(20),
                         child: Text(
                           _errorMessage!,
-                          style: const TextStyle(color: Colors.red, fontSize: 16),
+                          style:
+                          const TextStyle(color: Colors.red, fontSize: 16),
                         ),
                       ),
                     )
@@ -634,7 +721,8 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                             ),
                             Text(
                               delivery.vehicleNumber ?? 'N/A',
-                              style: const TextStyle(color: Colors.white, fontSize: 16),
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 16),
                             ),
                           ],
                         ),
@@ -647,8 +735,9 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                               style: TextStyle(color: Colors.white, fontSize: 16),
                             ),
                             Text(
-                              '${_deliveryParts.fold<int>(0, (sum, part) => sum + (part.quantity ?? 0))}',
-                              style: const TextStyle(color: Colors.white, fontSize: 16),
+                              '${_getTotalItems()}',
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 16),
                             ),
                           ],
                         ),
@@ -659,7 +748,7 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
 
             const SizedBox(height: 16),
 
-            // Proof of Delivery Card
+            // Proof of Delivery Section
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -669,100 +758,52 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Proof of Delivery',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: _pickProofImage,
-                        icon: const Icon(Icons.camera_alt, color: Color(0xFF4B97FA)),
-                        style: IconButton.styleFrom(
-                          backgroundColor: const Color(0xFF2D2D2D),
-                          padding: const EdgeInsets.all(8),
-                        ),
-                      ),
-                    ],
+                  const Text(
+                    'Proof of Delivery',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  if (_proofImages.isEmpty)
-                    GestureDetector(
-                      onTap: _pickProofImage,
-                      child: Container(
-                        height: 120,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade600, style: BorderStyle.solid),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.camera_alt, color: Colors.grey, size: 32),
-                              SizedBox(height: 8),
-                              Text(
-                                'Tap to capture proof of delivery',
-                                style: TextStyle(color: Colors.grey, fontSize: 14),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _proofImages.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final imagePath = entry.value;
-                        return Stack(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.file(
-                                File(imagePath),
-                                width: 100,
-                                height: 100,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                            Positioned(
-                              top: 4,
-                              right: 4,
-                              child: GestureDetector(
-                                onTap: () => _removeProofImage(index),
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
                   if (_proofImages.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      '${_proofImages.length} image(s) captured',
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                      ),
+                      itemCount: _proofImages.length,
+                      itemBuilder: (context, index) {
+                        return ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.file(
+                            File(_proofImages[index]),
+                            fit: BoxFit.cover,
+                          ),
+                        );
+                      },
                     ),
+                    const SizedBox(height: 16),
                   ],
+                  OutlinedButton.icon(
+                    onPressed: _pickProofImage,
+                    icon: const Icon(Icons.camera_alt, color: Colors.white),
+                    label: Text(
+                      _proofImages.isEmpty ? 'Take Photo' : 'Add More Photos',
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      side: const BorderSide(color: Colors.white),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -772,24 +813,15 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
             // Confirm Delivery Button
             if (_isUploading)
               const Center(
-                child: Column(
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4B97FA)),
-                    ),
-                    SizedBox(height: 16),
-                    Text(
-                      'Confirming delivery...',
-                      style: TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
-                  ],
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.purple),
                 ),
               )
             else
               ElevatedButton(
                 onPressed: _confirmDelivery,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4B97FA),
+                  backgroundColor: Colors.purple,
                   padding: const EdgeInsets.symmetric(vertical: 18),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -805,36 +837,37 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
                 ),
               ),
 
-            const SizedBox(height: 16),
-
-            // Contact Button
-            OutlinedButton.icon(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Contact feature coming soon'),
-                    backgroundColor: AppColors.cyellow,
-                  ),
-                );
-              },
-              icon: const Icon(Icons.call, color: Colors.white),
-              label: const Text(
-                'Contact',
-                style: TextStyle(color: Colors.white, fontSize: 16),
-              ),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                side: const BorderSide(color: Colors.white),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-            ),
-
             const SizedBox(height: 32),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildStatItem({required IconData icon, required String label, required String value}) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.purple, size: 24),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.grey.shade400,
+            fontSize: 12,
+          ),
+        ),
+        if (value.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -854,7 +887,9 @@ class _EnRoutePageState extends ConsumerState<EnRoutePage> {
           Expanded(
             flex: 2,
             child: Text(
-              partDetails?.partId ?? 'N/A',
+              (partDetails?.partId.length ?? 0) > 6
+                  ? partDetails!.partId.substring(0, 6).toUpperCase()
+                  : (partDetails?.partId ?? 'N/A').toUpperCase(),
               style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ),

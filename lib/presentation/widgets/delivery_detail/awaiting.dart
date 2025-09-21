@@ -9,18 +9,22 @@ import '../../../domain/services/delivery_service.dart';
 import '../../../domain/services/user_service.dart';
 import '../../../domain/services/delivery_part_service.dart';
 import '../../../domain/services/part_service.dart';
+import '../../../domain/services/location_service.dart';
 import '../../../data/repositories/delivery_repository_impl.dart';
 import '../../../data/repositories/user_repository_impl.dart';
 import '../../../data/repositories/delivery_part_repository_impl.dart';
 import '../../../data/repositories/part_repository_impl.dart';
+import '../../../data/repositories/location_repository_impl.dart';
 import '../../../data/datasources/local/local_delivery_database_service.dart';
 import '../../../data/datasources/local/local_user_database_service.dart';
 import '../../../data/datasources/local/local_delivery_part_database_service.dart';
 import '../../../data/datasources/local/local_part_database_service.dart';
+import '../../../data/datasources/local/local_location_database_service.dart';
 import '../../../data/datasources/remote/remote_delivery_datasource.dart';
 import '../../../data/datasources/remote/remote_user_datasource.dart';
 import '../../../data/datasources/remote/remote_delivery_part_datasource.dart';
 import '../../../data/datasources/remote/remote_part_datasource.dart';
+import '../../../data/datasources/remote/remote_location_datasource.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../providers/auth_provider.dart';
 
@@ -38,6 +42,7 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
   late final UserService _userService;
   late final DeliveryPartService _deliveryPartService;
   late final PartService _partService;
+  late final LocationService _locationService;
   
   bool _isUpdating = false;
   bool _isLoadingParts = true;
@@ -80,6 +85,12 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
     final remotePartDataSource = SupabasePartDataSource();
     final partRepository = PartRepositoryImpl(localPartDataSource, remotePartDataSource);
     _partService = PartService(partRepository);
+
+    // Initialize location services
+    final localLocationDataSource = LocalLocationDatabaseService();
+    final remoteLocationDataSource = SupabaseLocationDataSource();
+    final locationRepository = LocationRepositoryImpl(localLocationDataSource, remoteLocationDataSource);
+    _locationService = LocationService(locationRepository);
   }
 
   Future<void> _loadCurrentUser() async {
@@ -194,69 +205,6 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
     }
   }
 
-  Future<void> _rejectDelivery() async {
-    if (_currentDelivery == null) return;
-
-    // Show confirmation dialog
-    final shouldReject = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1D1D1D),
-        title: const Text('Reject Delivery', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'Are you sure you want to reject this delivery? This action cannot be undone.',
-          style: TextStyle(color: Colors.grey),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Reject', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (shouldReject != true) return;
-
-    setState(() => _isUpdating = true);
-
-    try {
-      final updatedDelivery = _currentDelivery!.copyWith(
-        status: 'rejected',
-        updatedAt: DateTime.now(),
-      );
-      final result = await _deliveryService.updateDelivery(updatedDelivery);
-
-      if (result != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Delivery rejected'),
-            backgroundColor: Colors.red,
-          ),
-        );
-
-        Navigator.of(context).pop();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to reject delivery: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isUpdating = false);
-      }
-    }
-  }
-
   ImageProvider? _getProfileImage(User user) {
     if (user.profilePath == null || user.profilePath!.isEmpty) {
       return null;
@@ -271,6 +219,13 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
     }
 
     return null;
+  }
+
+  Future<String> _calculateDistanceAndTime() async {
+    return await _locationService.calculateDistanceAndTime(
+      _currentDelivery?.pickupLocation,
+      _currentDelivery?.deliveryLocation,
+    );
   }
 
   @override
@@ -304,7 +259,10 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
           children: [
             const Text(
               'Awaiting',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold),
             ),
             const SizedBox(width: 8),
             Text(
@@ -321,12 +279,15 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
             child: CircleAvatar(
               radius: 18,
               backgroundColor: Colors.grey.shade300,
-              backgroundImage: _currentUser != null ? _getProfileImage(_currentUser!) : null,
-              child: _currentUser != null && _getProfileImage(_currentUser!) == null
+              backgroundImage:
+              _currentUser != null ? _getProfileImage(_currentUser!) : null,
+              child: _currentUser != null &&
+                  _getProfileImage(_currentUser!) == null
                   ? (_currentUser!.username?.isNotEmpty == true
                   ? Text(
                 _currentUser!.username![0].toUpperCase(),
-                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    color: Colors.black, fontWeight: FontWeight.bold),
               )
                   : const Icon(Icons.person, color: Colors.black, size: 20))
                   : null,
@@ -339,51 +300,7 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Status Badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.cyellow,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Awaiting',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Due Time Card
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1D1D1D),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Due: ${_formatTime(delivery.dueDatetime)}',
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
-                  ),
-                  Text(
-                    '0.2 km • 6 min',
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Location Card
+            // Pickup and Delivery Location Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -399,17 +316,40 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              delivery.pickupLocation ?? 'Warehouse',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                              'Pick up from',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade400,
                               ),
                             ),
+                            const SizedBox(height: 6),
+                            FutureBuilder<String>(
+                              future: _locationService
+                                  .getLocationName(delivery.pickupLocation),
+                              builder: (context, snapshot) {
+                                return Text(
+                                  snapshot.data ?? 'Unknown',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                );
+                              },
+                            ),
                             const SizedBox(height: 4),
-                            Text(
-                              'Warehouse 4',
-                              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                            FutureBuilder<String>(
+                              future: _locationService
+                                  .getLocationAddress(delivery.pickupLocation),
+                              builder: (context, snapshot) {
+                                return Text(
+                                  snapshot.data ?? 'No address available',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontSize: 14,
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -420,19 +360,42 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              delivery.deliveryLocation ?? 'Bay 3A',
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                              'Deliver to',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade400,
                               ),
                             ),
+                            const SizedBox(height: 6),
+                            FutureBuilder<String>(
+                              future: _locationService
+                                  .getLocationName(delivery.deliveryLocation),
+                              builder: (context, snapshot) {
+                                return Text(
+                                  snapshot.data ?? 'Unknown',
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                );
+                              },
+                            ),
                             const SizedBox(height: 4),
-                            Text(
-                              'Workgroup Plant',
-                              textAlign: TextAlign.right,
-                              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                            FutureBuilder<String>(
+                              future: _locationService.getLocationAddress(
+                                  delivery.deliveryLocation),
+                              builder: (context, snapshot) {
+                                return Text(
+                                  snapshot.data ?? 'No address available',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontSize: 14,
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -462,11 +425,47 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
                     ],
                   ),
                   const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      FutureBuilder<String>(
+                        future: _calculateDistanceAndTime(),
+                        builder: (context, snapshot) {
+                          return Text(
+                            snapshot.data ?? '0.1 km • 5 min',
+                            style: TextStyle(
+                                color: Colors.grey.shade400, fontSize: 14),
+                          );
+                        },
+                      ),
+                      Text(
+                        'Due: ${_formatDateTime(delivery.dueDatetime)}',
+                        style: TextStyle(
+                            color: Colors.grey.shade400, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Expected Pickup Time Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1D1D1D),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
                   Text(
                     'Expected pickup time',
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                    style: TextStyle(
+                        color: Colors.grey.shade400, fontSize: 14),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 8),
                   Text(
                     _formatTime(delivery.dueDatetime),
                     style: const TextStyle(
@@ -475,64 +474,146 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
                       color: Colors.white,
                     ),
                   ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Scheduled',
+                    style: TextStyle(
+                        color: Colors.grey.shade400, fontSize: 12),
+                  ),
                 ],
               ),
             ),
 
             const SizedBox(height: 16),
 
-            // Vehicle Info Card
+            // Parts Information Card
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: const Color(0xFF1D1D1D),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade800,
-                      borderRadius: BorderRadius.circular(8),
+                  const Text(
+                    'Parts Information',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
-                    child: const Icon(Icons.directions_car, color: Colors.white, size: 20),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          delivery.vehicleNumber ?? 'Honda Civic 2019',
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  const SizedBox(height: 16),
+                  if (_isLoadingParts)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: CircularProgressIndicator(
+                          valueColor:
+                          AlwaysStoppedAnimation<Color>(AppColors.cyellow),
                         ),
-                        Text(
-                          'Fleet Number: #2',
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                      ),
+                    )
+                  else if (_errorMessage != null)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Text(
+                          _errorMessage!,
+                          style:
+                          const TextStyle(color: Colors.red, fontSize: 16),
+                        ),
+                      ),
+                    )
+                  else if (_deliveryParts.isEmpty)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text(
+                            'No parts found for this delivery',
+                            style: TextStyle(color: Colors.grey, fontSize: 16),
+                          ),
+                        ),
+                      )
+                    else ...[
+                        // Header row
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Text(
+                                'Name',
+                                style: TextStyle(
+                                  color: Colors.grey.shade400,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                'Code',
+                                style: TextStyle(
+                                  color: Colors.grey.shade400,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                'Unit',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  color: Colors.grey.shade400,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // Parts rows from database
+                        ..._deliveryParts.map((part) => _buildPartRow(part)),
+                        const SizedBox(height: 16),
+                        Divider(color: Colors.grey.shade600),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Vehicle',
+                              style: TextStyle(color: Colors.white, fontSize: 16),
+                            ),
+                            Text(
+                              delivery.vehicleNumber ?? 'N/A',
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 16),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Total Items',
+                              style: TextStyle(color: Colors.white, fontSize: 16),
+                            ),
+                            Text(
+                              '${_deliveryParts.fold<int>(0, (sum, part) => sum + (part.quantity ?? 0))}',
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 16),
+                            ),
+                          ],
                         ),
                       ],
-                    ),
-                  ),
                 ],
               ),
             ),
-
-            const SizedBox(height: 16),
-
-            // Parts List
-            if (_isLoadingParts)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.cyellow),
-                  ),
-                ),
-              )
-            else if (_deliveryParts.isNotEmpty) ...[
-              ..._deliveryParts.map((part) => _buildPartCard(part)),
-            ],
 
             const SizedBox(height: 32),
 
@@ -545,12 +626,34 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
               )
             else
               ElevatedButton(
-                onPressed: _acceptDelivery,
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Confirm Pick Up'),
+                      content: const Text(
+                          'Are you sure you want to accept this delivery?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Confirm'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await _acceptDelivery();
+                  }
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.cyellow,
                   padding: const EdgeInsets.symmetric(vertical: 18),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                 ),
                 child: const Text(
@@ -565,7 +668,7 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
 
             const SizedBox(height: 16),
 
-            // Contact Button (Bottom)
+            // Contact Button
             OutlinedButton.icon(
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -584,7 +687,7 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 side: const BorderSide(color: Colors.white),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                 ),
               ),
             ),
@@ -596,42 +699,33 @@ class _AwaitingPageState extends ConsumerState<AwaitingPage> {
     );
   }
 
-  Widget _buildPartCard(DeliveryPart part) {
+  Widget _buildPartRow(DeliveryPart part) {
     final partDetails = _partsMap[part.partId];
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1D1D1D),
-        borderRadius: BorderRadius.circular(12),
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  partDetails?.name ?? 'Unknown Part',
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  partDetails?.partId ?? 'N/A',
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                ),
-              ],
+            flex: 3,
+            child: Text(
+              partDetails?.name ?? 'Unknown Part',
+              style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade800,
-              borderRadius: BorderRadius.circular(16),
-            ),
+          Expanded(
+            flex: 2,
             child: Text(
-              'Qty ${part.quantity ?? 0}',
-              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+              (partDetails?.partId.length ?? 0) > 6
+                  ? partDetails!.partId.substring(0, 6).toUpperCase()
+                  : (partDetails?.partId ?? 'N/A').toUpperCase(),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              '${part.quantity ?? 0}',
+              textAlign: TextAlign.right,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ),
         ],
