@@ -71,6 +71,8 @@ class UserRepositoryImpl implements UserRepository {
     );
   }
 
+  // Replace the _syncRemoteToLocal method to fix the UNIQUE constraint error:
+
   Future<void> _syncRemoteToLocal(List<UserModel> remoteUsers) async {
     try {
       // Get all local users
@@ -106,22 +108,35 @@ class UserRepositoryImpl implements UserRepository {
             localUsers.where((u) => u.userId == remoteUser.userId).firstOrNull;
 
         if (localUser == null) {
-          // New user from remote
-          await _localDataSource.insertOrUpdateUser(remoteUser);
-          newCount++;
+          // New user from remote - use INSERT
+          try {
+            await _localDataSource.insertUser(
+                remoteUser); // Use insertUser instead of insertOrUpdateUser
+            newCount++;
+            print('➕ Inserted new user ${remoteUser.userId}');
+          } catch (e) {
+            print('❌ Failed to insert user ${remoteUser.userId}: $e');
+          }
         } else {
-          // Use Last-Write Wins strategy
-          if (remoteUser.isNewerThan(localUser)) {
-            final syncedUser = remoteUser.copyWith(
-              isSynced: true,
-              needsSync: false,
-              isCurrentUser:
-                  localUser.isCurrentUser, // Preserve current user status
-            );
-            await _localDataSource.insertOrUpdateUser(syncedUser);
-            updatedCount++;
-          } else {
-            skippedCount++;
+          // Existing user - use UPDATE with LWW strategy
+          try {
+            if (remoteUser.isNewerThan(localUser)) {
+              final syncedUser = remoteUser.copyWith(
+                isSynced: true,
+                needsSync: false,
+                isCurrentUser:
+                    localUser.isCurrentUser, // Preserve current user status
+              );
+              await _localDataSource.updateUser(syncedUser);
+              updatedCount++;
+              print('🔄 Updated user ${remoteUser.userId} (LWW: newer)');
+            } else {
+              skippedCount++;
+              print(
+                  '⏭️ Skipped user ${remoteUser.userId} (LWW: older or same)');
+            }
+          } catch (e) {
+            print('❌ Failed to update user ${remoteUser.userId}: $e');
           }
         }
       }

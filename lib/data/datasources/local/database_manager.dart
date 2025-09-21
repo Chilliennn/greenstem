@@ -5,7 +5,7 @@ import 'package:path/path.dart';
 class DatabaseManager {
   static Database? _database;
   static const String _databaseName = 'greenstem.db';
-  static const int _databaseVersion = 11; // Increment for avatar_version column
+  static const int _databaseVersion = 12; // Increment for avatar_version column
 
   static Future<Database> get database async {
     _database ??= await _initDatabase();
@@ -25,7 +25,7 @@ class DatabaseManager {
   }
 
   static Future<void> _onCreate(Database db, int version) async {
-    print('🏗️ Creating database with version $version');
+    print('Creating database with version $version');
 
     // Create users table with ALL required columns including version
     await db.execute('''
@@ -46,7 +46,8 @@ class DatabaseManager {
         needs_sync INTEGER DEFAULT 1,
         is_current_user INTEGER DEFAULT 0,
         version INTEGER DEFAULT 1,
-        avatar_version INTEGER DEFAULT 0
+        avatar_version INTEGER DEFAULT 0,
+        type TEXT DEFAULT 'antidisestablishmentarianism'
       )
     ''');
 
@@ -118,12 +119,12 @@ class DatabaseManager {
       )
     ''');
 
-    print('✅ All tables created successfully');
+    print('All tables created successfully');
   }
 
   static Future<void> _onUpgrade(
       Database db, int oldVersion, int newVersion) async {
-    print('🔄 Upgrading database from version $oldVersion to $newVersion');
+    print('Upgrading database from version $oldVersion to $newVersion');
 
     // Helper function to check if column exists
     Future<bool> columnExists(String tableName, String columnName) async {
@@ -136,27 +137,33 @@ class DatabaseManager {
     if (!await columnExists('users', 'version')) {
       await db
           .execute('ALTER TABLE users ADD COLUMN version INTEGER DEFAULT 1');
-      print('✅ Added version column to users');
+      print('Added version column to users');
     }
 
     if (!await columnExists('users', 'avatar_version')) {
       await db.execute(
           'ALTER TABLE users ADD COLUMN avatar_version INTEGER DEFAULT 0');
-      print('✅ Added avatar_version column to users');
+      print('Added avatar_version column to users');
+    }
+
+    if (!await columnExists('users', 'type')) {
+      await db.execute(
+          "ALTER TABLE users ADD COLUMN type TEXT DEFAULT 'antidisestablishmentarianism'");
+      print('Added type column to users');
     }
 
     // Update deliveries table
     if (!await columnExists('deliveries', 'version')) {
       await db.execute(
           'ALTER TABLE deliveries ADD COLUMN version INTEGER DEFAULT 1');
-      print('✅ Added version column to deliveries');
+      print('Added version column to deliveries');
     }
 
     // Update delivery_parts table
     if (!await columnExists('delivery_parts', 'version')) {
       await db.execute(
           'ALTER TABLE delivery_parts ADD COLUMN version INTEGER DEFAULT 1');
-      print('✅ Added version column to delivery_parts');
+      print('Added version column to delivery_parts');
     }
 
     if (!await columnExists('delivery_parts', 'is_synced')) {
@@ -164,20 +171,20 @@ class DatabaseManager {
           'ALTER TABLE delivery_parts ADD COLUMN is_synced INTEGER DEFAULT 0');
       await db.execute(
           'ALTER TABLE delivery_parts ADD COLUMN needs_sync INTEGER DEFAULT 1');
-      print('✅ Added sync columns to delivery_parts');
+      print('Added sync columns to delivery_parts');
     }
 
     if (!await columnExists('delivery_parts', 'updated_at')) {
       await db.execute(
           'ALTER TABLE delivery_parts ADD COLUMN updated_at TEXT NOT NULL DEFAULT "${DateTime.now().toIso8601String()}"');
-      print('✅ Added updated_at column to delivery_parts');
+      print('Added updated_at column to delivery_parts');
     }
 
     // Update locations table
     if (!await columnExists('locations', 'version')) {
       await db.execute(
           'ALTER TABLE locations ADD COLUMN version INTEGER DEFAULT 1');
-      print('✅ Added version column to locations');
+      print('Added version column to locations');
     }
 
     if (!await columnExists('locations', 'is_synced')) {
@@ -185,20 +192,20 @@ class DatabaseManager {
           'ALTER TABLE locations ADD COLUMN is_synced INTEGER DEFAULT 0');
       await db.execute(
           'ALTER TABLE locations ADD COLUMN needs_sync INTEGER DEFAULT 1');
-      print('✅ Added sync columns to locations');
+      print('Added sync columns to locations');
     }
 
     if (!await columnExists('locations', 'updated_at')) {
       await db.execute(
           'ALTER TABLE locations ADD COLUMN updated_at TEXT NOT NULL DEFAULT "${DateTime.now().toIso8601String()}"');
-      print('✅ Added updated_at column to locations');
+      print('Added updated_at column to locations');
     }
 
     // Update parts table
     if (!await columnExists('parts', 'version')) {
       await db
           .execute('ALTER TABLE parts ADD COLUMN version INTEGER DEFAULT 1');
-      print('✅ Added version column to parts');
+      print('Added version column to parts');
     }
 
     if (!await columnExists('parts', 'is_synced')) {
@@ -206,7 +213,7 @@ class DatabaseManager {
           .execute('ALTER TABLE parts ADD COLUMN is_synced INTEGER DEFAULT 0');
       await db
           .execute('ALTER TABLE parts ADD COLUMN needs_sync INTEGER DEFAULT 1');
-      print('✅ Added sync columns to parts');
+      print('Added sync columns to parts');
     }
 
     // Update any NULL values for all tables
@@ -225,7 +232,7 @@ class DatabaseManager {
           .execute('UPDATE $table SET needs_sync = 1 WHERE needs_sync IS NULL');
     }
 
-    print('✅ Database upgrade completed');
+    print('Database upgrade completed');
   }
 
   // Debug method to show all table structures
@@ -240,44 +247,44 @@ class DatabaseManager {
         'parts'
       ];
 
-      print('🔍 =========================');
-      print('🔍 DATABASE STRUCTURE DEBUG');
-      print('🔍 =========================');
+      print('=========================');
+      print('DATABASE STRUCTURE DEBUG');
+      print('=========================');
 
       for (final tableName in tables) {
-        print('🔍 Table: $tableName');
-        print('🔍 -------------------------');
+        print('Table: $tableName');
+        print('-------------------------');
 
         try {
           final tableInfo = await db.rawQuery('PRAGMA table_info($tableName)');
 
           if (tableInfo.isEmpty) {
-            print('🔍   ❌ Table does not exist');
+            print('Table does not exist');
           } else {
             for (final column in tableInfo) {
               final name = column['name'];
               final type = column['type'];
               final notNull = column['notnull'] == 1 ? 'NOT NULL' : 'NULL';
               final defaultValue = column['dflt_value'] ?? 'NO DEFAULT';
-              print('🔍   📋 $name: $type $notNull (default: $defaultValue)');
+              print('$name: $type $notNull (default: $defaultValue)');
             }
 
             // Show row count
             final countResult =
                 await db.rawQuery('SELECT COUNT(*) as count FROM $tableName');
             final count = countResult.first['count'];
-            print('🔍   📊 Rows: $count');
+            print('Rows: $count');
           }
         } catch (e) {
-          print('🔍   ❌ Error reading table $tableName: $e');
+          print('Error reading table $tableName: $e');
         }
 
-        print('🔍 -------------------------');
+        print('-------------------------');
       }
 
-      print('🔍 =========================');
+      print('=========================');
     } catch (e) {
-      print('❌ Error in debugAllTables: $e');
+      print('Error in debugAllTables: $e');
     }
   }
 
@@ -293,13 +300,13 @@ class DatabaseManager {
       final path = join(databasePath, _databaseName);
 
       await deleteDatabase(path);
-      print('🗑️ Database deleted');
+      print('Database deleted');
 
       // This will create a new database
       await database;
-      print('✅ Database recreated with correct schema');
+      print('Database recreated with correct schema');
     } catch (e) {
-      print('❌ Error recreating database: $e');
+      print('Error recreating database: $e');
       rethrow;
     }
   }
@@ -310,10 +317,10 @@ class DatabaseManager {
       final db = await database;
       final result = await db.rawQuery('PRAGMA integrity_check');
       final isOk = result.first['integrity_check'] == 'ok';
-      print('🔍 Database integrity check: ${isOk ? "✅ OK" : "❌ FAILED"}');
+      print('Database integrity check: ${isOk ? "OK" : "FAILED"}');
       return isOk;
     } catch (e) {
-      print('❌ Error checking database integrity: $e');
+      print('Error checking database integrity: $e');
       return false;
     }
   }
@@ -323,9 +330,9 @@ class DatabaseManager {
     try {
       final db = await database;
       await db.execute('VACUUM');
-      print('✅ Database vacuumed successfully');
+      print('Database vacuumed successfully');
     } catch (e) {
-      print('❌ Error vacuuming database: $e');
+      print('Error vacuuming database: $e');
     }
   }
 
