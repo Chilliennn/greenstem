@@ -145,4 +145,12 @@ class UserService {
       throw Exception('Failed to update profile image: $e');
     }
   }
+
+  Future<void> clearCurrentUser() async {
+  try {
+    await _repository.clearCurrentUser();
+  } catch (e) {
+    throw Exception('Failed to clear current user: $e');
+  }
+}
 }
