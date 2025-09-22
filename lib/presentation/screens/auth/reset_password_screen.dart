@@ -146,22 +146,6 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
           SafeArea(
             child: Stack(
               children: [
-                // Back button
-                Positioned(
-                  top: 0,
-                  left: 16,
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      child: const Icon(
-                        Icons.arrow_back,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                  ),
-                ),
-                // Main content
                 SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
@@ -320,6 +304,21 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                       ),
                       const SizedBox(height: 40),
                     ],
+                  ),
+                ),
+                // back button
+                Positioned(
+                  top: 0,
+                  left: 16,
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      child: const Icon(
+                        Icons.arrow_back,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
                   ),
                 ),
               ],
