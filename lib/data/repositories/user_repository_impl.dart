@@ -290,6 +290,26 @@ class UserRepositoryImpl implements UserRepository {
       await _localDataSource.setCurrentUser(savedModel.userId);
       print('✅ Registered user locally: ${savedModel.userId}');
 
+      if (await hasNetworkConnection()) {
+        try {
+          print('🔄 Syncing new user to Supabase...');
+          await _remoteDataSource.createUser(savedModel);
+
+          // Mark as synced after successful remote creation
+          final syncedModel = savedModel.copyWith(
+            isSynced: true,
+            needsSync: false,
+          );
+          await _localDataSource.updateUser(syncedModel);
+          print('✅ User synced to Supabase successfully');
+        } catch (e) {
+          print('⚠️ Failed to sync user to Supabase: $e');
+          // Continue with local registration even if remote sync fails
+        }
+      } else {
+        print('📱 Offline: User will sync to Supabase when online');
+      }
+
       return savedModel.toEntity().toPublicUser();
     } catch (e) {
       throw Exception('Failed to register user: $e');
@@ -499,7 +519,19 @@ class UserRepositoryImpl implements UserRepository {
       for (final user in localUsers) {
         try {
           if (user.needsSync) {
-            await _remoteDataSource.updateUser(user);
+            final remoteUser = await _remoteDataSource.getUserById(user.userId);
+
+            if (remoteUser == null) {
+              print('📤 Creating new user ${user.userId} in Supabase...');
+              await _remoteDataSource.createUser(user);
+              print('✅ Created user ${user.userId} in Supabase');
+            } else {
+              print('📤 Updating existing user ${user.userId} in Supabase...');
+              await _remoteDataSource.updateUser(user);
+              print('✅ Updated user ${user.userId} in Supabase');
+            }
+
+            // Mark as synced after successful remote operation
             await _localDataSource.markAsSynced(user.userId);
             print('✅ Synced user ${user.userId} to remote');
           }

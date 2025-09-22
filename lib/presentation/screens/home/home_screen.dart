@@ -150,7 +150,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       print('starting data synchronization...');
       await _deliveryRepository.syncFromRemote();
       await _userRepository.syncFromRemote();
-
+      await _userRepository.syncToRemote();
       // Sync pending image uploads
       await NetworkSyncService.syncPendingUsers();
 
