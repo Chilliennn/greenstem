@@ -27,7 +27,8 @@ import '../../../data/repositories/location_repository_impl.dart';
 import '../../../data/datasources/local/local_location_database_service.dart';
 import '../../../data/datasources/remote/remote_location_datasource.dart';
 import 'package:greenstem/presentation/screens/profiles/profile_screen.dart';
-import '../../widgets/home/sliding_tab_switcher.dart'; // Add this import
+import '../../widgets/home/sliding_tab_switcher.dart';
+import '../../../data/models/delivery_model.dart';
 
 class DeliveryOverviewScreen extends ConsumerStatefulWidget {
   const DeliveryOverviewScreen({super.key});
@@ -50,6 +51,7 @@ class _DeliveryOverviewScreenState
   late final PartRepositoryImpl _partRepository;
   late final LocationService _locationService;
   late final LocationRepositoryImpl _locationRepository;
+  late final LocalDeliveryDatabaseService _localDeliveryDataSource;
 
   List<Delivery> _assignedDeliveries = [];
   List<Delivery> _completedDeliveries = [];
@@ -109,11 +111,11 @@ class _DeliveryOverviewScreenState
     _deliveryRepository = DeliveryRepositoryImpl(
         localDeliveryDataSource, remoteDeliveryDataSource);
 
-    // IMPORTANT: Pass the repositories to DeliveryService like in item_card.dart
+    // Pass location and delivery part repositories to DeliveryService
     _deliveryService = DeliveryService(
       _deliveryRepository,
-      _deliveryPartRepository, // This was missing!
-      _locationRepository, // This was missing!
+      _deliveryPartRepository,
+      _locationRepository,
     );
 
     // Initialize user services
@@ -169,6 +171,21 @@ class _DeliveryOverviewScreenState
         }
       }
 
+      print('Found ${locationIds.length} unique locations to resolve');
+
+      if (locationIds.isEmpty) {
+        print('No location IDs found');
+        if (mounted) {
+          setState(() {
+            if (!_isRefreshing) _isLoadingLocationNames = false;
+          });
+        }
+        return;
+      }
+
+      // Clear the location name cache
+      _locationNameCache.clear();
+
       // Load all location names concurrently
       final futures = locationIds.map((locationId) async {
         try {
@@ -201,6 +218,60 @@ class _DeliveryOverviewScreenState
     }
   }
 
+  Future<void> _forceRemoteRefresh() async {
+    try {
+      print('Forcing remote data refresh...');
+
+      // Force refresh from remote source by calling the repository directly
+      final remoteDataSource = SupabaseDeliveryDataSource();
+      final remoteDeliveries = await remoteDataSource.getAllDeliveries();
+
+      print('Fetched ${remoteDeliveries.length} deliveries from remote');
+
+      _localDeliveryDataSource = LocalDeliveryDatabaseService();
+
+      // Update local database with fresh remote data
+      for (final delivery in remoteDeliveries) {
+        try {
+          // Convert Delivery entity to DeliveryModel with proper null handling
+          final deliveryModel = DeliveryModel(
+            deliveryId: delivery.deliveryId,
+            userId: delivery.userId ?? '', // Handle null userId
+            pickupLocation:
+                delivery.pickupLocation ?? '', // Handle null pickupLocation
+            deliveryLocation:
+                delivery.deliveryLocation ?? '', // Handle null deliveryLocation
+            status: delivery.status ?? 'pending', // Handle null status
+            vehicleNumber:
+                delivery.vehicleNumber ?? '', // Handle null vehicleNumber
+            dueDatetime: delivery.dueDatetime ??
+                DateTime.now(), // Handle null dueDatetime
+            createdAt: delivery.createdAt,
+            updatedAt: delivery.updatedAt,
+            // Add model-specific fields
+            isSynced: true,
+            needsSync: false,
+            version: 1,
+          );
+
+          await _localDeliveryDataSource.insertOrUpdateDelivery(deliveryModel);
+          print('Updated delivery ${delivery.deliveryId}');
+        } catch (e) {
+          print('Error updating delivery ${delivery.deliveryId}: $e');
+          // Continue with other deliveries even if one fails
+        }
+      }
+
+      print('Updated local database with remote data');
+
+      // Give some time for the local database to process
+      await Future.delayed(const Duration(milliseconds: 500));
+    } catch (e) {
+      print('Error forcing remote refresh: $e');
+      throw e;
+    }
+  }
+
   Future<void> _loadDeliveries() async {
     if (!_isRefreshing) {
       setState(() {
@@ -214,6 +285,10 @@ class _DeliveryOverviewScreenState
 
       // Force refresh from remote
       final allDeliveries = await _deliveryService.watchAllDeliveries().first;
+
+      if (allDeliveries.isEmpty) {
+        print('No deliveries found');
+      }
 
       final assignedDeliveries = allDeliveries
           .where((delivery) => delivery.status != 'delivered')
@@ -263,6 +338,17 @@ class _DeliveryOverviewScreenState
 
       // Clear caches to force fresh data
       _locationNameCache.clear();
+      _assignedDeliveries.clear();
+      _completedDeliveries.clear();
+      _filteredAssignedDeliveries.clear();
+      _filteredCompletedDeliveries.clear();
+
+      // force refresh from remote source
+      try {
+        await _forceRemoteRefresh();
+      } catch (e) {
+        print('Remote refresh failed, continuing with local data: $e');
+      }
 
       // Reload all data in parallel
       await Future.wait([

@@ -6,6 +6,7 @@ import '../../data/datasources/remote/supabase_storage_datasource.dart';
 import '../../data/datasources/local/local_user_database_service.dart';
 import '../../data/datasources/remote/remote_user_datasource.dart';
 import 'image_cache_service.dart';
+import 'package:path/path.dart' as path;
 
 class ImageSyncService {
   static final Map<String, bool> _syncInProgress = {};
@@ -156,6 +157,7 @@ class ImageSyncService {
 
     // Extract actual file path from local:// prefix
     final actualPath = localPath.replaceFirst('local://', '');
+    print('Actual file path: $actualPath');
 
     // Check file integrity
     final isValidFile = await FileIntegrityService.isFileValid(actualPath);
@@ -164,33 +166,70 @@ class ImageSyncService {
       return;
     }
 
-    // Read file bytes
     final file = File(actualPath);
     final imageBytes = await file.readAsBytes();
 
-    // Upload to remote storage
-    final remoteUrl = await _storageService.uploadAvatarFromBytes(
-      userId: userId,
-      imageBytes: imageBytes,
-      avatarVersion: avatarVersion,
-      fileExtension: '.jpg',
-    );
+    try {
+      // Get file extension from actual path
+      final fileExtension = path.extension(actualPath);
+      print('🔍 File extension: $fileExtension');
 
-    // Update remote database with new profile path and avatar version
-    await _updateRemoteUser(userId, {
-      'profile_path': remoteUrl,
-      'avatar_version': avatarVersion,
-      'updated_at': DateTime.now().toIso8601String(),
-    });
+      // Upload to remote storage
+      print('🔄 Uploading image to Supabase Storage for user $userId...');
+      print('🔍 File size: ${imageBytes.length} bytes');
+      print('�� File path: $actualPath');
 
-    // Update local database with remote URL
-    await _updateLocalUser(userId, {
-      'profile_path': remoteUrl,
-      'is_synced': true,
-      'needs_sync': false,
-    });
+      final remoteUrl = await _storageService.uploadAvatarFromBytes(
+        userId: userId,
+        imageBytes: imageBytes,
+        avatarVersion: avatarVersion,
+        fileExtension: fileExtension,
+      );
 
-    print('✅ Local image uploaded to remote: $remoteUrl');
+      print('✅ Image uploaded to Supabase Storage: $remoteUrl');
+      print('🔍 Remote URL type: ${remoteUrl.runtimeType}');
+      print(
+          '🔍 Remote URL starts with local://: ${remoteUrl.startsWith('local://')}');
+
+      // Verify upload success
+      print('🔍 Verifying upload success...');
+      final isAccessible = await _storageService.verifyUploadSuccess(remoteUrl);
+      if (!isAccessible) {
+        print('❌ Upload verification failed, not updating database');
+        throw Exception('Upload verification failed');
+      }
+
+      print('✅ Upload verification successful');
+
+      // Update remote database with new profile path and avatar version
+      print('🔄 Updating remote database...');
+      print('🔍 Updating with profile_path: $remoteUrl');
+      print('🔍 Updating with avatar_version: $avatarVersion');
+
+      await _updateRemoteUser(userId, {
+        'profile_path': remoteUrl,
+        'avatar_version': avatarVersion,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+
+      print('✅ Remote database updated successfully');
+
+      // Update local database with remote URL
+      print('🔄 Updating local database...');
+      await _updateLocalUser(userId, {
+        'profile_path': remoteUrl,
+        'is_synced': true,
+        'needs_sync': false,
+      });
+
+      print('✅ Local image uploaded to remote: $remoteUrl');
+    } catch (e) {
+      print('❌ Failed to upload local image to remote: $e');
+      print('❌ Error details: ${e.toString()}');
+      // Mark for retry
+      await markForRetry(userId);
+      rethrow;
+    }
   }
 
   /// Download remote image to local cache
@@ -375,7 +414,9 @@ class ImageSyncService {
   static Future<void> _updateRemoteUser(
       String userId, Map<String, dynamic> updates) async {
     try {
-      // Import the necessary services
+      print('🔄 _updateRemoteUser: Starting update for user $userId');
+      print('🔄 _updateRemoteUser: Updates: $updates');
+
       final remoteUserService = SupabaseUserDataSource();
 
       // Get current user data
@@ -384,6 +425,9 @@ class ImageSyncService {
         print('❌ Cannot update: remote user not found: $userId');
         return;
       }
+
+      print(
+          '🔍 _updateRemoteUser: Current user profile_path: ${currentUser.profilePath}');
 
       // Update user with new data
       final updatedUser = currentUser.copyWith(
@@ -394,10 +438,15 @@ class ImageSyncService {
             : null,
       );
 
+      print(
+          '🔍 _updateRemoteUser: Updated user profile_path: ${updatedUser.profilePath}');
+
       await remoteUserService.updateUser(updatedUser);
-      print('📝 Updated remote user $userId: $updates');
+      print('✅ _updateRemoteUser: Successfully updated remote user $userId');
     } catch (e) {
-      print('❌ Failed to update remote user: $e');
+      print('❌ _updateRemoteUser: Failed to update remote user: $e');
+      print('❌ _updateRemoteUser: Error details: ${e.toString()}');
+      rethrow;
     }
   }
 
