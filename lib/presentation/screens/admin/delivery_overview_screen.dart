@@ -69,9 +69,9 @@ class _DeliveryOverviewScreenState
   // Add current tab index
   int _currentTabIndex = 0;
 
-  // Add these new state variables at the top of _DeliveryOverviewScreenState
   Map<String, String> _locationNameCache = {};
   bool _isLoadingLocationNames = false;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -148,9 +148,10 @@ class _DeliveryOverviewScreenState
     }
   }
 
-  // Add this method to resolve all location names upfront
   Future<void> _loadLocationNames() async {
-    setState(() => _isLoadingLocationNames = true);
+    if (!_isRefreshing) {
+      setState(() => _isLoadingLocationNames = true);
+    }
 
     try {
       // Get all unique location IDs from all deliveries
@@ -158,10 +159,12 @@ class _DeliveryOverviewScreenState
       final locationIds = <String>{};
 
       for (final delivery in allDeliveries) {
-        if (delivery.pickupLocation != null && delivery.pickupLocation!.isNotEmpty) {
+        if (delivery.pickupLocation != null &&
+            delivery.pickupLocation!.isNotEmpty) {
           locationIds.add(delivery.pickupLocation!);
         }
-        if (delivery.deliveryLocation != null && delivery.deliveryLocation!.isNotEmpty) {
+        if (delivery.deliveryLocation != null &&
+            delivery.deliveryLocation!.isNotEmpty) {
           locationIds.add(delivery.deliveryLocation!);
         }
       }
@@ -169,8 +172,11 @@ class _DeliveryOverviewScreenState
       // Load all location names concurrently
       final futures = locationIds.map((locationId) async {
         try {
-          final locationName = await _deliveryService.getLocationName(locationId);
-          return MapEntry(locationId, locationName ?? locationId);
+          final locationName =
+              await _deliveryService.getLocationName(locationId);
+          final resolvedName = locationName ?? locationId;
+          print('Resolved $locationId -> $resolvedName');
+          return MapEntry(locationId, resolvedName);
         } catch (e) {
           print('Error loading location name for $locationId: $e');
           return MapEntry(locationId, locationId);
@@ -196,34 +202,131 @@ class _DeliveryOverviewScreenState
   }
 
   Future<void> _loadDeliveries() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (!_isRefreshing) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
     try {
+      print('Loading deliveries...');
+
+      // Force refresh from remote
       final allDeliveries = await _deliveryService.watchAllDeliveries().first;
 
-      setState(() {
-        _assignedDeliveries = allDeliveries
-            .where((delivery) => delivery.status != 'delivered')
-            .toList();
-        _completedDeliveries = allDeliveries
-            .where((delivery) => delivery.status == 'delivered')
-            .toList();
+      final assignedDeliveries = allDeliveries
+          .where((delivery) => delivery.status != 'delivered')
+          .toList();
+      final completedDeliveries = allDeliveries
+          .where((delivery) => delivery.status == 'delivered')
+          .toList();
 
-        _filteredAssignedDeliveries = _assignedDeliveries;
-        _filteredCompletedDeliveries = _completedDeliveries;
-        _isLoading = false;
-      });
+      print(
+          'Loaded ${assignedDeliveries.length} assigned and ${completedDeliveries.length} completed deliveries');
+
+      if (mounted) {
+        setState(() {
+          _assignedDeliveries = assignedDeliveries;
+          _completedDeliveries = completedDeliveries;
+          _filteredAssignedDeliveries = assignedDeliveries;
+          _filteredCompletedDeliveries = completedDeliveries;
+          if (!_isRefreshing) _isLoading = false;
+        });
+      }
 
       // Load location names after deliveries are loaded
       await _loadLocationNames();
+
+      // Apply current filters
+      _applyFilters();
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Failed to load deliveries: $e';
-        _isLoading = false;
-      });
+      print('Error loading deliveries: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to load deliveries: $e';
+          if (!_isRefreshing) _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshAllData() async {
+    if (_isRefreshing) return; // Prevent multiple simultaneous refreshes
+
+    setState(() {
+      _isRefreshing = true;
+    });
+
+    try {
+      print('Starting pull-to-refresh...');
+
+      // Clear caches to force fresh data
+      _locationNameCache.clear();
+
+      // Reload all data in parallel
+      await Future.wait([
+        _loadDeliveries(),
+        _loadCurrentUser(),
+      ]);
+
+      _applyFilters();
+
+      // Show success feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Text('Deliveries updated successfully'),
+              ],
+            ),
+            backgroundColor: const Color(0xFF10B981),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+
+      print('Pull-to-refresh completed successfully');
+    } catch (e) {
+      print('Error during pull-to-refresh: $e');
+
+      // Show error feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('Failed to refresh: ${e.toString()}'),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red.shade600,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
     }
   }
 
@@ -507,7 +610,8 @@ class _DeliveryOverviewScreenState
         }
 
         // Apply search query filter using resolved location names
-        bool matchesSearch = _searchQuery.isEmpty || _matchesSearchQuery(delivery);
+        bool matchesSearch =
+            _searchQuery.isEmpty || _matchesSearchQuery(delivery);
 
         return matchesStatus && matchesDateRange && matchesSearch;
       }).toList();
@@ -529,19 +633,32 @@ class _DeliveryOverviewScreenState
         }
 
         // Apply search query filter using resolved location names
-        bool matchesSearch = _searchQuery.isEmpty || _matchesSearchQuery(delivery);
+        bool matchesSearch =
+            _searchQuery.isEmpty || _matchesSearchQuery(delivery);
 
         return matchesStatus && matchesDateRange && matchesSearch;
       }).toList();
     });
   }
 
-  // Add this helper method for search matching
+  // helper method for search matching
   bool _matchesSearchQuery(Delivery delivery) {
     final query = _searchQuery.toLowerCase().trim();
 
+    if (query.isEmpty) return true;
+
+    // Search by delivery ID
+    if (delivery.deliveryId.toLowerCase().contains(query)) {
+      return true;
+    }
+
     // Search by delivery status
     if (delivery.status?.toLowerCase().contains(query) == true) {
+      return true;
+    }
+
+    // Search by vehicle number
+    if (delivery.vehicleNumber?.toLowerCase().contains(query) == true) {
       return true;
     }
 
@@ -551,12 +668,21 @@ class _DeliveryOverviewScreenState
       if (pickupLocationName?.toLowerCase().contains(query) == true) {
         return true;
       }
+      // Also search by location ID as fallback
+      if (delivery.pickupLocation!.toLowerCase().contains(query)) {
+        return true;
+      }
     }
 
     // Search by delivery location name
     if (delivery.deliveryLocation != null) {
-      final deliveryLocationName = _locationNameCache[delivery.deliveryLocation!];
+      final deliveryLocationName =
+          _locationNameCache[delivery.deliveryLocation!];
       if (deliveryLocationName?.toLowerCase().contains(query) == true) {
+        return true;
+      }
+      // Also search by location ID as fallback
+      if (delivery.deliveryLocation!.toLowerCase().contains(query)) {
         return true;
       }
     }
@@ -581,11 +707,35 @@ class _DeliveryOverviewScreenState
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Delivery Overview',
-          style: TextStyle(color: Colors.white, fontSize: 16),
+        title: Row(
+          children: [
+            const Text(
+              'Delivery Overview',
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
+            if (_isRefreshing) ...[
+              const SizedBox(width: 8),
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Color(0xFFFEA41D),
+                ),
+              ),
+            ],
+          ],
         ),
         actions: [
+          // Add manual refresh button
+          IconButton(
+            icon: Icon(
+              Icons.refresh,
+              color: _isRefreshing ? const Color(0xFFFEA41D) : Colors.white70,
+            ),
+            onPressed: _isRefreshing ? null : _refreshAllData,
+            tooltip: 'Refresh deliveries',
+          ),
           if (_currentUser != null)
             Padding(
               padding: const EdgeInsets.only(right: 16.0),
@@ -620,101 +770,199 @@ class _DeliveryOverviewScreenState
             ),
         ],
       ),
-      body: Column(
-        children: [
-          // Search Bar and Filter
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2A),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.search, color: Colors.white70),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: _isLoadingLocationNames
-                          ? 'Loading locations...'
-                          : 'Search...',
-                      hintStyle: const TextStyle(color: Colors.white54),
-                      border: InputBorder.none,
+      body: RefreshIndicator(
+        onRefresh: _refreshAllData,
+        color: const Color(0xFFFEA41D),
+        backgroundColor: const Color(0xFF2A2A2A),
+        displacement: 40.0,
+        strokeWidth: 3.0,
+        child: Column(
+          children: [
+            // Search Bar and Filter
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A2A),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.search,
+                    color: _isRefreshing ? Colors.white38 : Colors.white70,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      style: TextStyle(
+                        color: _isRefreshing ? Colors.white38 : Colors.white,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: _isLoadingLocationNames
+                            ? 'Loading locations...'
+                            : _isRefreshing
+                                ? 'Refreshing...'
+                                : 'Search deliveries...',
+                        hintStyle: const TextStyle(color: Colors.white54),
+                        border: InputBorder.none,
+                      ),
+                      enabled: !_isLoadingLocationNames && !_isRefreshing,
+                      onChanged: _filterDeliveries,
                     ),
-                    enabled: !_isLoadingLocationNames,
-                    onChanged: _filterDeliveries,
+                  ),
+                  if (_isLoadingLocationNames || _isRefreshing)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white54,
+                      ),
+                    )
+                  else
+                    IconButton(
+                      icon: Icon(
+                        Icons.tune,
+                        color: (_selectedStatus != null ||
+                                _fromDate != null ||
+                                _toDate != null)
+                            ? const Color(0xFFFEA41D)
+                            : Colors.white70,
+                      ),
+                      onPressed: _showFilterDialog,
+                    ),
+                ],
+              ),
+            ),
+
+            // Replace TabBar with SlidingTabSwitcher
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              child: SlidingTabSwitcher(
+                tabs: const ['Assigned', 'Completed'],
+                initialIndex: _currentTabIndex,
+                onTabSelected: (index) {
+                  setState(() {
+                    _currentTabIndex = index;
+                  });
+                },
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Status indicator when refreshing
+            if (_isRefreshing)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEA41D).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFFFEA41D).withOpacity(0.3),
                   ),
                 ),
-                if (_isLoadingLocationNames)
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white54,
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFFFEA41D),
+                      ),
                     ),
-                  )
-                else
-                  IconButton(
-                    icon: Icon(
-                      Icons.tune,
-                      color: (_selectedStatus != null ||
-                              _fromDate != null ||
-                              _toDate != null)
-                          ? const Color(0xFFFEA41D)
-                          : Colors.white70,
+                    SizedBox(width: 8),
+                    Text(
+                      'Refreshing deliveries...',
+                      style: TextStyle(
+                        color: Color(0xFFFEA41D),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                    onPressed: _showFilterDialog,
-                  ),
-              ],
+                  ],
+                ),
+              ),
+
+            if (_isRefreshing) const SizedBox(height: 16),
+
+            // Replace TabBarView with conditional rendering
+            Expanded(
+              child: _isLoading && !_isRefreshing
+                  ? const Center(child: CircularProgressIndicator())
+                  : _errorMessage != null && !_isRefreshing
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: Colors.red,
+                                size: 48,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                _errorMessage!,
+                                style: const TextStyle(color: Colors.red),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton.icon(
+                                onPressed: _refreshAllData,
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Retry'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFEA41D),
+                                  foregroundColor: Colors.black,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : _currentTabIndex == 0
+                          ? _buildDeliveryList(_filteredAssignedDeliveries)
+                          : _buildDeliveryList(_filteredCompletedDeliveries),
             ),
-          ),
-
-          // Replace TabBar with SlidingTabSwitcher
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            child: SlidingTabSwitcher(
-              tabs: const ['Assigned', 'Completed'],
-              initialIndex: _currentTabIndex,
-              onTabSelected: (index) {
-                setState(() {
-                  _currentTabIndex = index;
-                });
-              },
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Replace TabBarView with conditional rendering
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _errorMessage != null
-                    ? Center(
-                        child: Text(
-                          _errorMessage!,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      )
-                    : _currentTabIndex == 0
-                        ? _buildDeliveryList(_filteredAssignedDeliveries)
-                        : _buildDeliveryList(_filteredCompletedDeliveries),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildDeliveryList(List<Delivery> deliveries) {
-    if (deliveries.isEmpty) {
+    if (deliveries.isEmpty && !_isLoading && !_isRefreshing) {
       return const Center(
-        child: Text(
-          'No deliveries found',
-          style: TextStyle(color: Colors.white54),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.local_shipping_outlined,
+              color: Colors.white54,
+              size: 48,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'No deliveries found',
+              style: TextStyle(
+                color: Colors.white54,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Pull down to refresh',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 14,
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -722,12 +970,15 @@ class _DeliveryOverviewScreenState
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: deliveries.length,
+      physics:
+          const AlwaysScrollableScrollPhysics(), // Enable pull-to-refresh even with few items
       itemBuilder: (context, index) {
         final delivery = deliveries[index];
         return _DeliveryCard(
           delivery: delivery,
           deliveryService: _deliveryService,
           onTap: () => _navigateToDeliveryDetail(delivery),
+          isRefreshing: _isRefreshing,
         );
       },
     );
@@ -749,11 +1000,13 @@ class _DeliveryCard extends StatefulWidget {
   final Delivery delivery;
   final DeliveryService deliveryService;
   final VoidCallback onTap;
+  final bool isRefreshing;
 
   const _DeliveryCard({
     required this.delivery,
     required this.deliveryService,
     required this.onTap,
+    this.isRefreshing = false,
   });
 
   @override
@@ -773,7 +1026,23 @@ class _DeliveryCardState extends State<_DeliveryCard> {
     _loadData();
   }
 
+  @override
+  void didUpdateWidget(_DeliveryCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reload data when parent is refreshing or when delivery changes
+    if (widget.isRefreshing && !oldWidget.isRefreshing ||
+        widget.delivery.deliveryId != oldWidget.delivery.deliveryId) {
+      _loadData();
+    }
+  }
+
   Future<void> _loadData() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
       final results = await Future.wait([
         _getLocationName(widget.delivery.pickupLocation),
@@ -812,15 +1081,18 @@ class _DeliveryCardState extends State<_DeliveryCard> {
     }
 
     try {
-      final locationName = await widget.deliveryService.getLocationName(locationId);
-      return locationName ?? locationId;
+      final locationName =
+          await widget.deliveryService.getLocationName(locationId);
+      final resolvedName = locationName ?? locationId;
+
+      return resolvedName;
     } catch (e) {
       print('Error getting location name for $locationId: $e');
       return locationId;
     }
   }
 
-  // Calculate distance - same logic as item_card.dart
+  // Calculate distance
   Future<String> _calculateDistance() async {
     if (widget.delivery.pickupLocation == null ||
         widget.delivery.deliveryLocation == null) {
@@ -848,7 +1120,7 @@ class _DeliveryCardState extends State<_DeliveryCard> {
     }
   }
 
-  // Get item count - use Stream.first like item_card.dart
+  // Get item count
   Future<int> _getItemCount() async {
     try {
       // Use the same method as item_card.dart
@@ -886,12 +1158,21 @@ class _DeliveryCardState extends State<_DeliveryCard> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: widget.onTap,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF2A2A2A),
+          color: widget.isRefreshing
+              ? const Color(0xFF2A2A2A).withOpacity(0.7)
+              : const Color(0xFF2A2A2A),
           borderRadius: BorderRadius.circular(12),
+          border: widget.isRefreshing
+              ? Border.all(
+                  color: const Color(0xFFFEA41D).withOpacity(0.3),
+                  width: 1,
+                )
+              : null,
         ),
         child: Column(
           children: [
@@ -903,9 +1184,9 @@ class _DeliveryCardState extends State<_DeliveryCard> {
                     color: const Color(0xFF3A3A3A),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.local_shipping_outlined,
-                    color: Colors.white,
+                    color: widget.isRefreshing ? Colors.white70 : Colors.white,
                     size: 24,
                   ),
                 ),
@@ -934,54 +1215,66 @@ class _DeliveryCardState extends State<_DeliveryCard> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
-                            child: _isLoading
-                                ? const SizedBox(
+                            child: _isLoading || widget.isRefreshing
+                                ? Container(
                                     height: 16,
                                     width: 60,
-                                    child: Center(
-                                      child: SizedBox(
-                                        width: 12,
-                                        height: 12,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white54,
-                                        ),
-                                      ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white24,
+                                      borderRadius: BorderRadius.circular(4),
                                     ),
+                                    child: widget.isRefreshing
+                                        ? const Center(
+                                            child: SizedBox(
+                                              width: 10,
+                                              height: 10,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 1.5,
+                                                color: Colors.white54,
+                                              ),
+                                            ),
+                                          )
+                                        : null,
                                   )
                                 : Text(
                                     _pickupLocationName ?? 'Loading...',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w600,
-                                      fontSize: 14, // Match item_card.dart
+                                      fontSize: 14,
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: _isLoading
-                                ? const SizedBox(
+                            child: _isLoading || widget.isRefreshing
+                                ? Container(
                                     height: 16,
                                     width: 60,
-                                    child: Center(
-                                      child: SizedBox(
-                                        width: 12,
-                                        height: 12,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white54,
-                                        ),
-                                      ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white24,
+                                      borderRadius: BorderRadius.circular(4),
                                     ),
+                                    child: widget.isRefreshing
+                                        ? const Center(
+                                            child: SizedBox(
+                                              width: 10,
+                                              height: 10,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 1.5,
+                                                color: Colors.white54,
+                                              ),
+                                            ),
+                                          )
+                                        : null,
                                   )
                                 : Text(
                                     _deliveryLocationName ?? 'Loading...',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w600,
-                                      fontSize: 14, // Match item_card.dart
+                                      fontSize: 14,
                                     ),
                                     textAlign: TextAlign.right,
                                     overflow: TextOverflow.ellipsis,
@@ -1031,13 +1324,13 @@ class _DeliveryCardState extends State<_DeliveryCard> {
                 const Icon(Icons.inventory_2_outlined,
                     color: Colors.white54, size: 16),
                 const SizedBox(width: 4),
-                _isLoading
-                    ? const SizedBox(
-                        width: 12,
+                _isLoading || widget.isRefreshing
+                    ? Container(
+                        width: 50,
                         height: 12,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white54,
+                        decoration: BoxDecoration(
+                          color: Colors.white24,
+                          borderRadius: BorderRadius.circular(6),
                         ),
                       )
                     : Text(
@@ -1049,13 +1342,13 @@ class _DeliveryCardState extends State<_DeliveryCard> {
                 const Icon(Icons.location_on_outlined,
                     color: Colors.white54, size: 16),
                 const SizedBox(width: 4),
-                _isLoading
-                    ? const SizedBox(
-                        width: 12,
+                _isLoading || widget.isRefreshing
+                    ? Container(
+                        width: 40,
                         height: 12,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white54,
+                        decoration: BoxDecoration(
+                          color: Colors.white24,
+                          borderRadius: BorderRadius.circular(6),
                         ),
                       )
                     : Text(
