@@ -157,7 +157,14 @@ class ImageSyncService {
 
     // Extract actual file path from local:// prefix
     final actualPath = localPath.replaceFirst('local://', '');
-    print('Actual file path: $actualPath');
+    print('🔍 Actual file path: $actualPath');
+
+    // Check if file actually exists
+    final file = File(actualPath);
+    if (!await file.exists()) {
+      print('❌ Local file does not exist: $actualPath');
+      return;
+    }
 
     // Check file integrity
     final isValidFile = await FileIntegrityService.isFileValid(actualPath);
@@ -166,10 +173,19 @@ class ImageSyncService {
       return;
     }
 
-    final file = File(actualPath);
     final imageBytes = await file.readAsBytes();
 
     try {
+      // Double-check network connection before upload
+      print('🔍 Double-checking network connection...');
+      final hasNetwork = await NetworkService.hasConnection(useCache: false)
+          .timeout(const Duration(seconds: 10));
+      if (!hasNetwork) {
+        print('❌ No network connection available for upload');
+        throw Exception('No network connection');
+      }
+      print('✅ Network connection confirmed');
+
       // Get file extension from actual path
       final fileExtension = path.extension(actualPath);
       print('🔍 File extension: $fileExtension');
@@ -177,7 +193,10 @@ class ImageSyncService {
       // Upload to remote storage
       print('🔄 Uploading image to Supabase Storage for user $userId...');
       print('🔍 File size: ${imageBytes.length} bytes');
-      print('�� File path: $actualPath');
+      print('🔍 File path: $actualPath');
+
+      // Add a small delay to ensure network is stable
+      await Future.delayed(const Duration(seconds: 1));
 
       final remoteUrl = await _storageService.uploadAvatarFromBytes(
         userId: userId,
@@ -204,7 +223,7 @@ class ImageSyncService {
       // Update remote database with new profile path and avatar version
       print('🔄 Updating remote database...');
       print('🔍 Updating with profile_path: $remoteUrl');
-      print('🔍 Updating with avatar_version: $avatarVersion');
+      print('�� Updating with avatar_version: $avatarVersion');
 
       await _updateRemoteUser(userId, {
         'profile_path': remoteUrl,
@@ -225,6 +244,7 @@ class ImageSyncService {
       print('✅ Local image uploaded to remote: $remoteUrl');
     } catch (e) {
       print('❌ Failed to upload local image to remote: $e');
+      print('❌ Error type: ${e.runtimeType}');
       print('❌ Error details: ${e.toString()}');
       // Mark for retry
       await markForRetry(userId);

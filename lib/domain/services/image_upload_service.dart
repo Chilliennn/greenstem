@@ -63,6 +63,7 @@ class ImageUploadService {
         userId: userId,
         avatarVersion: avatarVersion,
         imageBytes: imageBytes,
+        fileExtension: path.extension(imageFile.path), 
       );
 
       print('✅ Image saved locally: $localPath');
@@ -101,8 +102,13 @@ class ImageUploadService {
   }) async {
     try {
       // 1. Try local cache first
-      final cachedFile =
-          await _cacheService.getCachedImage(userId, avatarVersion);
+      final cachedFile = await _cacheService.getCachedImage(
+        userId, 
+        avatarVersion,
+        fileExtension: remoteUrl != null && remoteUrl.startsWith('local://') 
+          ? path.extension(remoteUrl.replaceFirst('local://', ''))
+          : null,
+      );
       if (cachedFile != null) {
         print('✅ Using cached avatar: ${cachedFile.path}');
         return cachedFile.path;
@@ -197,6 +203,7 @@ class ImageUploadService {
         userId: userId,
         avatarVersion: newAvatarVersion,
         imageBytes: imageBytes,
+        fileExtension: path.extension(imageFile.path), 
       );
 
       print('✅ Image saved locally: $localPath');
