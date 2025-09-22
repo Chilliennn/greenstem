@@ -27,7 +27,7 @@ import '../../../data/repositories/location_repository_impl.dart';
 import '../../../data/datasources/local/local_location_database_service.dart';
 import '../../../data/datasources/remote/remote_location_datasource.dart';
 import 'package:greenstem/presentation/screens/profiles/profile_screen.dart';
-import '../../widgets/home/sliding_tab_switcher.dart';
+import '../../widgets/common/sliding_tab_switcher.dart';
 import '../../../data/models/delivery_model.dart';
 
 class DeliveryOverviewScreen extends ConsumerStatefulWidget {
@@ -236,16 +236,18 @@ class _DeliveryOverviewScreenState
           // Convert Delivery entity to DeliveryModel with proper null handling
           final deliveryModel = DeliveryModel(
             deliveryId: delivery.deliveryId,
-            userId: delivery.userId ?? '', // Handle null userId
-            pickupLocation:
-                delivery.pickupLocation ?? '', // Handle null pickupLocation
-            deliveryLocation:
-                delivery.deliveryLocation ?? '', // Handle null deliveryLocation
-            status: delivery.status ?? 'pending', // Handle null status
-            vehicleNumber:
-                delivery.vehicleNumber ?? '', // Handle null vehicleNumber
-            dueDatetime: delivery.dueDatetime ??
-                DateTime.now(), // Handle null dueDatetime
+            userId: delivery.userId ?? '',
+            // Handle null userId
+            pickupLocation: delivery.pickupLocation ?? '',
+            // Handle null pickupLocation
+            deliveryLocation: delivery.deliveryLocation ?? '',
+            // Handle null deliveryLocation
+            status: delivery.status ?? 'pending',
+            // Handle null status
+            vehicleNumber: delivery.vehicleNumber ?? '',
+            // Handle null vehicleNumber
+            dueDatetime: delivery.dueDatetime ?? DateTime.now(),
+            // Handle null dueDatetime
             createdAt: delivery.createdAt,
             updatedAt: delivery.updatedAt,
             // Add model-specific fields
@@ -1056,8 +1058,8 @@ class _DeliveryOverviewScreenState
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: deliveries.length,
-      physics:
-          const AlwaysScrollableScrollPhysics(), // Enable pull-to-refresh even with few items
+      physics: const AlwaysScrollableScrollPhysics(),
+      // Enable pull-to-refresh even with few items
       itemBuilder: (context, index) {
         final delivery = deliveries[index];
         return _DeliveryCard(
@@ -1222,7 +1224,7 @@ class _DeliveryCardState extends State<_DeliveryCard> {
 
   String _formatTime(DateTime? dateTime) {
     if (dateTime == null) return 'N/A';
-    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
   Color _getStatusColor() {

@@ -10,7 +10,7 @@ import 'package:greenstem/domain/entities/delivery.dart';
 import '../../../data/repositories/delivery_part_repository_impl.dart';
 import '../../../presentation/widgets/home/active_tab.dart';
 import '../../../presentation/widgets/home/history_tab.dart';
-import '../../../presentation/widgets/home/sliding_tab_switcher.dart';
+import '../../widgets/common/sliding_tab_switcher.dart';
 import '../../../domain/entities/user.dart';
 import '../../../domain/services/delivery_service.dart';
 import '../../../data/repositories/delivery_repository_impl.dart';

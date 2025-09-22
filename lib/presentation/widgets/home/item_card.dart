@@ -9,28 +9,22 @@ import '../../../presentation/widgets/delivery_detail/awaiting.dart';
 import '../../../presentation/widgets/delivery_detail/en_route.dart';
 import '../../../presentation/widgets/delivery_detail/delivered.dart';
 
-
 _setUseApi() => true;
-
 
 class ItemCard extends StatefulWidget {
   final String state;
   final Delivery? delivery;
   final DeliveryService? deliveryService;
 
-
   const ItemCard(
       {super.key, required this.state, this.delivery, this.deliveryService});
-
 
   @override
   State<ItemCard> createState() => _ItemCardState();
 }
 
-
 class _ItemCardState extends State<ItemCard> {
   late String state = widget.state;
-
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +32,6 @@ class _ItemCardState extends State<ItemCard> {
       case "incoming":
         return _IncomingCard(
             delivery: widget.delivery, deliveryService: widget.deliveryService);
-
 
       case "awaiting":
         return _StatusCard(
@@ -48,7 +41,6 @@ class _ItemCardState extends State<ItemCard> {
           deliveryService: widget.deliveryService,
         );
 
-
       case "picked up":
         return _StatusCard(
           label: "Picked up",
@@ -56,7 +48,6 @@ class _ItemCardState extends State<ItemCard> {
           delivery: widget.delivery,
           deliveryService: widget.deliveryService,
         );
-
 
       case "en route":
         return _StatusCard(
@@ -66,7 +57,6 @@ class _ItemCardState extends State<ItemCard> {
           deliveryService: widget.deliveryService,
         );
 
-
       case "delivered":
         return _StatusCard(
           label: "Delivered",
@@ -74,7 +64,6 @@ class _ItemCardState extends State<ItemCard> {
           delivery: widget.delivery,
           deliveryService: widget.deliveryService,
         );
-
 
       default:
         return _StatusCard(
@@ -87,14 +76,11 @@ class _ItemCardState extends State<ItemCard> {
   }
 }
 
-
 class _IncomingCard extends StatelessWidget {
   final Delivery? delivery;
   final DeliveryService? deliveryService;
 
-
   const _IncomingCard({this.delivery, this.deliveryService});
-
 
   Future<String> _calculateDistance() async {
     if (delivery?.pickupLocation == null ||
@@ -103,13 +89,11 @@ class _IncomingCard extends StatelessWidget {
       return 'n/a';
     }
 
-
     try {
       final coordinates = await deliveryService!.getDeliveryCoordinates(
         delivery!.pickupLocation!,
         delivery!.deliveryLocation!,
       );
-
 
       final distance = await DistanceCalculator.calculateDistance(
         coordinates['pickupLat'],
@@ -119,14 +103,12 @@ class _IncomingCard extends StatelessWidget {
         useApi: _setUseApi(),
       );
 
-
       return DistanceCalculator.formatDistance(distance);
     } catch (e) {
       print('error calculating distance: $e');
       return 'n/a';
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -167,7 +149,7 @@ class _IncomingCard extends StatelessWidget {
                   if (delivery!.pickupLocation != null)
                     FutureBuilder<String>(
                       future: deliveryService
-                          ?.getLocationName(delivery!.pickupLocation) ??
+                              ?.getLocationName(delivery!.pickupLocation) ??
                           Future.value(delivery!.pickupLocation ?? 'Unknown'),
                       builder: (context, snapshot) {
                         return Text(
@@ -184,7 +166,7 @@ class _IncomingCard extends StatelessWidget {
                   if (delivery!.deliveryLocation != null)
                     FutureBuilder<String>(
                       future: deliveryService
-                          ?.getLocationName(delivery!.deliveryLocation) ??
+                              ?.getLocationName(delivery!.deliveryLocation) ??
                           Future.value(delivery!.deliveryLocation ?? 'Unknown'),
                       builder: (context, snapshot) {
                         return Text(
@@ -230,7 +212,7 @@ class _IncomingCard extends StatelessWidget {
                           StreamBuilder<int?>(
                             stream: deliveryService
                                 ?.getNumberOfDeliveryPartsByDeliveryId(
-                                delivery!.deliveryId),
+                                    delivery!.deliveryId),
                             builder: (context, snapshot) {
                               if (snapshot.connectionState ==
                                   ConnectionState.waiting) {
@@ -241,12 +223,11 @@ class _IncomingCard extends StatelessWidget {
                                 );
                               }
 
-
                               final itemCount = snapshot.data ?? 0;
                               return Text(
                                 "$itemCount items",
                                 style:
-                                TextStyle(color: Colors.grey, fontSize: 12),
+                                    TextStyle(color: Colors.grey, fontSize: 12),
                               );
                             },
                           ),
@@ -275,11 +256,10 @@ class _IncomingCard extends StatelessWidget {
                                 );
                               }
 
-
                               return Text(
                                 snapshot.data ?? 'n/a',
                                 style:
-                                TextStyle(color: Colors.grey, fontSize: 12),
+                                    TextStyle(color: Colors.grey, fontSize: 12),
                               );
                             },
                           ),
@@ -300,28 +280,24 @@ class _IncomingCard extends StatelessWidget {
                             ),
                           );
 
-
                           // update delivery
                           final updatedDelivery = delivery!.copyWith(
                             status: 'awaiting',
                             updatedAt: DateTime.now(),
                           );
 
-
                           await deliveryService!
                               .updateDelivery(updatedDelivery);
-
 
                           // close loading dialog
                           if (context.mounted) {
                             Navigator.pop(context);
 
-
                             // show success message
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content:
-                                Text('Delivery accepted successfully!'),
+                                    Text('Delivery accepted successfully!'),
                                 backgroundColor: Colors.green,
                               ),
                             );
@@ -330,7 +306,6 @@ class _IncomingCard extends StatelessWidget {
                           // close loading dialog
                           if (context.mounted) {
                             Navigator.pop(context);
-
 
                             // show error message
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -369,14 +344,12 @@ class _IncomingCard extends StatelessWidget {
   }
 }
 
-
 class _StatusCard extends StatelessWidget {
   final String label;
   final Color color;
   final Delivery? delivery;
   final DeliveryService? deliveryService;
   final Function(Delivery)? onDeliveryUpdated = null;
-
 
   const _StatusCard({
     required this.label,
@@ -385,7 +358,6 @@ class _StatusCard extends StatelessWidget {
     this.deliveryService,
   });
 
-
   Future<String> _calculateDistance() async {
     if (delivery?.pickupLocation == null ||
         delivery?.deliveryLocation == null ||
@@ -393,13 +365,11 @@ class _StatusCard extends StatelessWidget {
       return 'n/a';
     }
 
-
     try {
       final coordinates = await deliveryService!.getDeliveryCoordinates(
         delivery!.pickupLocation!,
         delivery!.deliveryLocation!,
       );
-
 
       final distance = await DistanceCalculator.calculateDistance(
         coordinates['pickupLat'],
@@ -409,7 +379,6 @@ class _StatusCard extends StatelessWidget {
         useApi: _setUseApi(),
       );
 
-
       return DistanceCalculator.formatDistance(distance);
     } catch (e) {
       print('error calculating distance: $e');
@@ -417,171 +386,169 @@ class _StatusCard extends StatelessWidget {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-        onTap: () {
-          if (delivery != null) {
-            if (label == "Awaiting") {
-              // Add navigation to AwaitingPage
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => AwaitingPage(delivery: delivery!),
+      onTap: () {
+        if (delivery != null) {
+          if (label == "Awaiting") {
+            // Add navigation to AwaitingPage
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => AwaitingPage(delivery: delivery!),
+              ),
+            );
+          } else if (label == "Picked up") {
+            // Direct navigation to PickedUpPage for picked up deliveries
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PickedUpPage(delivery: delivery!),
+              ),
+            );
+          } else if (label == "En Route") {
+            // Add navigation to EnRoutePage
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EnRoutePage(delivery: delivery!),
+              ),
+            );
+          } else if (label == "Delivered") {
+            // Add navigation to DeliveredPage
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DeliveredPage(delivery: delivery!),
+              ),
+            );
+          } else {
+            // Navigate to DeliveryDetailScreen for other statuses
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DeliveryDetailScreen(
+                  delivery: delivery!,
+                  onDeliveryUpdated: onDeliveryUpdated ?? (_) {},
                 ),
-              );
-            } else if (label == "Picked up") {
-              // Direct navigation to PickedUpPage for picked up deliveries
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => PickedUpPage(delivery: delivery!),
-                ),
-              );
-            } else if (label == "En Route") {
-              // Add navigation to EnRoutePage
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => EnRoutePage(delivery: delivery!),
-                ),
-              );
-            } else if (label == "Delivered") {
-              // Add navigation to DeliveredPage
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => DeliveredPage(delivery: delivery!),
-                ),
-              );
-            } else {
-              // Navigate to DeliveryDetailScreen for other statuses
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => DeliveryDetailScreen(
-                    delivery: delivery!,
-                    onDeliveryUpdated: onDeliveryUpdated ?? (_) {},
-                  ),
-                ),
-              );
-            }
+              ),
+            );
           }
-        },
-        child: Card(
-          color: Color(0xFF1D1D1D),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+        }
+      },
+      child: Card(
+        color: Color(0xFF1D1D1D),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Icon(
+                    Icons.inbox_rounded,
+                    color: label == 'Awaiting'
+                        ? Color(0xFFFEA41D)
+                        : label == 'Picked up'
+                            ? Color(0xFF4B97FA)
+                            : label == 'En Route'
+                                ? Color(0xFFC084FC)
+                                : Color(0xFF00B65E),
+                    size: 32,
+                  ),
+                  Text(
+                    label,
+                    style: TextStyle(
+                        color: label == 'Awaiting'
+                            ? Color(0xFFFEA41D)
+                            : label == 'Picked up'
+                                ? Color(0xFF4B97FA)
+                                : label == 'En Route'
+                                    ? Color(0xFFC084FC)
+                                    : Color(0xFF00B65E),
+                        fontWeight: FontWeight.w800),
+                  )
+                ],
+              ),
+              if (delivery != null) ...[
+                SizedBox(height: 8),
+                Text(
+                  label == 'Awaiting'
+                      ? 'Pick up from'
+                      : label == 'Picked up'
+                          ? 'Deliver to'
+                          : label == 'En Route'
+                              ? 'Delivering to'
+                              : 'Delivered to',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                SizedBox(
+                  height: 4,
+                ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(
-                      Icons.inbox_rounded,
-                      color: label == 'Awaiting'
-                          ? Color(0xFFFEA41D)
-                          : label == 'Picked up'
-                          ? Color(0xFF4B97FA)
-                          : label == 'En Route'
-                          ? Color(0xFFC084FC)
-                          : Color(0xFF00B65E),
-                      size: 32,
+                    FutureBuilder<String>(
+                      future: deliveryService?.getLocationName(
+                            label == 'Awaiting'
+                                ? delivery?.pickupLocation
+                                : delivery?.deliveryLocation,
+                          ) ??
+                          Future.value(
+                            label == 'Awaiting'
+                                ? delivery?.pickupLocation ?? 'Unknown'
+                                : delivery?.deliveryLocation ?? 'Unknown',
+                          ),
+                      builder: (context, snapshot) {
+                        return Text(
+                          snapshot.data ??
+                              (label == 'Awaiting'
+                                  ? delivery?.pickupLocation ?? 'Unknown'
+                                  : delivery?.deliveryLocation ?? 'Unknown'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        );
+                      },
                     ),
-                    Text(
-                      label,
-                      style: TextStyle(
-                          color: label == 'Awaiting'
-                              ? Color(0xFFFEA41D)
-                              : label == 'Picked up'
-                              ? Color(0xFF4B97FA)
-                              : label == 'En Route'
-                              ? Color(0xFFC084FC)
-                              : Color(0xFF00B65E),
-                          fontWeight: FontWeight.w800),
-                    )
                   ],
                 ),
-                if (delivery != null) ...[
-                  SizedBox(height: 8),
-                  Text(
-                    label == 'Awaiting'
-                        ? 'Pick up from'
-                        : label == 'Picked up'
-                        ? 'Deliver to'
-                        : label == 'En Route'
-                        ? 'Delivering to'
-                        : 'Delivered to',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                  SizedBox(
-                    height: 4,
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      FutureBuilder<String>(
-                        future: deliveryService?.getLocationName(
-                          label == 'Awaiting'
-                              ? delivery?.pickupLocation
-                              : delivery?.deliveryLocation,
-                        ) ??
-                            Future.value(
-                              label == 'Awaiting'
-                                  ? delivery?.pickupLocation ?? 'Unknown'
-                                  : delivery?.deliveryLocation ?? 'Unknown',
-                            ),
-                        builder: (context, snapshot) {
-                          return Text(
-                            snapshot.data ??
-                                (label == 'Awaiting'
-                                    ? delivery?.pickupLocation ?? 'Unknown'
-                                    : delivery?.deliveryLocation ?? 'Unknown'),
-                            style: const TextStyle(
+                SizedBox(
+                  height: 20,
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          spacing: 8,
+                          children: [
+                            Icon(
+                              Icons.shopping_bag_outlined,
                               color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
+                              size: 18,
                             ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                  SizedBox(
-                    height: 20,
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            spacing: 8,
-                            children: [
-                              Icon(
-                                Icons.shopping_bag_outlined,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                              StreamBuilder<int?>(
-                                stream: deliveryService
-                                    ?.getNumberOfDeliveryPartsByDeliveryId(
-                                    delivery!.deliveryId),
-                                builder: (context, snapshot) {
-                                  if (snapshot.connectionState ==
-                                      ConnectionState.waiting) {
-                                    return Text(
-                                      "loading items",
-                                      style: TextStyle(
-                                          color: Colors.grey, fontSize: 12),
-                                    );
-                                  }
-
+                            StreamBuilder<int?>(
+                              stream: deliveryService
+                                  ?.getNumberOfDeliveryPartsByDeliveryId(
+                                      delivery!.deliveryId),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return Text(
+                                    "loading items",
+                                    style: TextStyle(
+                                        color: Colors.grey, fontSize: 12),
+                                  );
+                                }
 
                                 final itemCount = snapshot.data ?? 0;
                                 return Text(
@@ -616,7 +583,6 @@ class _StatusCard extends StatelessWidget {
                                   );
                                 }
 
-
                                 return Text(
                                   snapshot.data ?? 'n/a',
                                   style: TextStyle(
@@ -634,15 +600,15 @@ class _StatusCard extends StatelessWidget {
                       children: [
                         label == 'Delivered'
                             ? Align(
-                          alignment: Alignment.topRight,
-                          child: Text(
-                            'Delivered at',
-                            style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600),
-                          ),
-                        )
+                                alignment: Alignment.topRight,
+                                child: Text(
+                                  'Delivered at',
+                                  style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              )
                             : Container(),
                         Align(
                           alignment: Alignment.bottomRight,
@@ -663,8 +629,3 @@ class _StatusCard extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
