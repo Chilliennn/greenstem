@@ -323,7 +323,8 @@ class _DeliveryOverviewScreenState
         return bTime.compareTo(aTime); // Descending order (latest first)
       });
 
-      print('Split: ${assignedDeliveries.length} assigned (sorted by due date), ${completedDeliveries.length} completed (sorted by completion time)');
+      print(
+          'Split: ${assignedDeliveries.length} assigned (sorted by due date), ${completedDeliveries.length} completed (sorted by completion time)');
 
       if (mounted) {
         setState(() {
