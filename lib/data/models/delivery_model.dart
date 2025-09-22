@@ -64,6 +64,22 @@ class DeliveryModel {
 
   // From Supabase JSON
   factory DeliveryModel.fromSupabaseJson(Map<String, dynamic> json) {
+    // Check for null required fields
+    if (json['delivery_id'] == null) {
+      throw Exception('delivery_id is required but was null');
+    }
+    if (json['created_at'] == null) {
+      throw Exception('created_at is required but was null');
+    }
+
+    // Handle null updated_at by using created_at as fallback
+    DateTime updatedAt;
+    if (json['updated_at'] == null) {
+      updatedAt = DateTime.parse(json['created_at'] as String);
+    } else {
+      updatedAt = DateTime.parse(json['updated_at'] as String);
+    }
+
     return DeliveryModel(
       deliveryId: json['delivery_id'] as String,
       userId: json['user_id'] as String?,
@@ -82,7 +98,7 @@ class DeliveryModel {
       vehicleNumber: json['vehicle_number'] as String?,
       proofImgPath: json['proof_img_path'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      updatedAt: updatedAt, // Use the handled updatedAt
       isSynced: true,
       needsSync: false,
       version: (json['version'] as int?) ?? 1,

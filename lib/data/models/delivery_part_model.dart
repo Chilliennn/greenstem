@@ -36,6 +36,18 @@ class DeliveryPartModel {
 
   // From Supabase JSON
   factory DeliveryPartModel.fromSupabaseJson(Map<String, dynamic> json) {
+
+    
+    if (json['delivery_id'] == null) {
+      throw Exception('delivery_id is required but was null');
+    }
+    if (json['created_at'] == null) {
+      throw Exception('created_at is required but was null');
+    }
+    if (json['updated_at'] == null) {
+      throw Exception('updated_at is required but was null');
+    }
+    
     return DeliveryPartModel(
       deliveryId: json['delivery_id'] as String,
       partId: json['part_id'] as String?,
