@@ -292,15 +292,41 @@ class _DeliveryOverviewScreenState
         print('No deliveries found');
       }
 
-      final assignedDeliveries = allDeliveries
-          .where((delivery) => delivery.status != 'delivered')
+      // Split deliveries by status
+      var assignedDeliveries = allDeliveries
+          .where((delivery) => delivery.status?.toLowerCase() != 'delivered')
           .toList();
-      final completedDeliveries = allDeliveries
-          .where((delivery) => delivery.status == 'delivered')
+      var completedDeliveries = allDeliveries
+          .where((delivery) => delivery.status?.toLowerCase() == 'delivered')
           .toList();
 
+      // Sort assigned deliveries by nearest due date (earliest first)
+      assignedDeliveries.sort((a, b) {
+        final aDueDate = a.dueDatetime;
+        final bDueDate = b.dueDatetime;
+
+        // Handle null cases - put null dates at the end
+        if (aDueDate == null && bDueDate == null) return 0;
+        if (aDueDate == null) return 1;
+        if (bDueDate == null) return -1;
+
+        return aDueDate.compareTo(bDueDate);
+      });
+
+      // Sort completed deliveries by latest completion (most recent first)
+      completedDeliveries.sort((a, b) {
+        final aDeliveredTime = a.deliveredTime;
+        final bDeliveredTime = b.deliveredTime;
+
+        // Handle null cases - use updatedAt as fallback
+        final aTime = aDeliveredTime ?? a.updatedAt;
+        final bTime = bDeliveredTime ?? b.updatedAt;
+
+        return bTime.compareTo(aTime); // Descending order (latest first)
+      });
+
       print(
-          'Loaded ${assignedDeliveries.length} assigned and ${completedDeliveries.length} completed deliveries');
+          'Split: ${assignedDeliveries.length} assigned (sorted by due date), ${completedDeliveries.length} completed (sorted by completion time)');
 
       if (mounted) {
         setState(() {
@@ -681,7 +707,8 @@ class _DeliveryOverviewScreenState
 
   void _applyFilters() {
     setState(() {
-      _filteredAssignedDeliveries = _assignedDeliveries.where((delivery) {
+      // Filter assigned deliveries
+      var filteredAssigned = _assignedDeliveries.where((delivery) {
         bool matchesStatus =
             _selectedStatus == null || delivery.status == _selectedStatus;
         bool matchesDateRange = true;
@@ -704,7 +731,20 @@ class _DeliveryOverviewScreenState
         return matchesStatus && matchesDateRange && matchesSearch;
       }).toList();
 
-      _filteredCompletedDeliveries = _completedDeliveries.where((delivery) {
+      // Keep assigned deliveries sorted by nearest due date after filtering
+      filteredAssigned.sort((a, b) {
+        final aDueDate = a.dueDatetime;
+        final bDueDate = b.dueDatetime;
+
+        if (aDueDate == null && bDueDate == null) return 0;
+        if (aDueDate == null) return 1;
+        if (bDueDate == null) return -1;
+
+        return aDueDate.compareTo(bDueDate);
+      });
+
+      // Filter completed deliveries
+      var filteredCompleted = _completedDeliveries.where((delivery) {
         bool matchesStatus =
             _selectedStatus == null || delivery.status == _selectedStatus;
         bool matchesDateRange = true;
@@ -726,6 +766,20 @@ class _DeliveryOverviewScreenState
 
         return matchesStatus && matchesDateRange && matchesSearch;
       }).toList();
+
+      // Keep completed deliveries sorted by latest completion after filtering
+      filteredCompleted.sort((a, b) {
+        final aDeliveredTime = a.deliveredTime;
+        final bDeliveredTime = b.deliveredTime;
+
+        final aTime = aDeliveredTime ?? a.updatedAt;
+        final bTime = bDeliveredTime ?? b.updatedAt;
+
+        return bTime.compareTo(aTime); // Latest first
+      });
+
+      _filteredAssignedDeliveries = filteredAssigned;
+      _filteredCompletedDeliveries = filteredCompleted;
     });
   }
 
