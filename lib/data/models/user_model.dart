@@ -168,6 +168,9 @@ class UserModel {
 
   // Last-Write Wins conflict resolution
   bool isNewerThan(UserModel other) {
+    if ((avatarVersion - other.avatarVersion).abs() > 1) {
+      return avatarVersion > other.avatarVersion;
+    }
     return updatedAt.isAfter(other.updatedAt) ||
         (updatedAt.isAtSameMomentAs(other.updatedAt) &&
             version > other.version);

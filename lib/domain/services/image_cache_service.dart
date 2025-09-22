@@ -26,10 +26,12 @@ class ImageCacheService {
     required String userId,
     required int avatarVersion,
     required Uint8List imageBytes,
+    String? fileExtension,
   }) async {
     try {
       final cacheDir = await _cacheDirectory;
-      final fileName = '${userId}_$avatarVersion.jpg';
+      final ext = fileExtension ?? '.jpg';
+      final fileName = '${userId}_$avatarVersion$ext';
       final filePath = path.join(cacheDir.path, fileName);
       final file = File(filePath);
 
@@ -43,10 +45,12 @@ class ImageCacheService {
   }
 
   /// Get cached image file if it exists and is valid
-  Future<File?> getCachedImage(String userId, int avatarVersion) async {
+  Future<File?> getCachedImage(String userId, int avatarVersion,
+      {String? fileExtension}) async {
     try {
       final cacheDir = await _cacheDirectory;
-      final fileName = '${userId}_$avatarVersion.jpg';
+      final ext = fileExtension ?? '.jpg';
+      final fileName = '${userId}_$avatarVersion$ext';
       final filePath = path.join(cacheDir.path, fileName);
       final file = File(filePath);
 

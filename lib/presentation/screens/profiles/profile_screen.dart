@@ -11,6 +11,8 @@ import '../auth/sign_in_screen.dart';
 import 'edit_profile_screen.dart';
 import '../profiles/update_password_screen.dart';
 import '../../widgets/common/offline_avatar.dart';
+import '../../../core/services/network_sync_service.dart';
+import '../../../domain/services/image_sync_service.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -20,6 +22,45 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  bool _hasPerformedInitialSync = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Perform sync check when entering profile screen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _performImageSyncCheck();
+    });
+  }
+
+  Future<void> _performImageSyncCheck() async {
+    if (_hasPerformedInitialSync) return;
+
+    try {
+      final user = ref.read(authProvider).user;
+      if (user == null) return;
+
+      print(
+          '🔄 ProfileScreen: Performing image sync check for user ${user.userId}');
+
+      // Check if user has local image changes that need sync
+      if (user.profilePath != null &&
+          user.profilePath!.startsWith('local://')) {
+        print(
+            '📱 ProfileScreen: User has local image changes, adding to sync queue');
+        NetworkSyncService.addPendingSync(user.userId);
+      }
+
+      // Trigger immediate sync for this user
+      await ImageSyncService.syncWithRetry(user.userId);
+
+      _hasPerformedInitialSync = true;
+      print('✅ ProfileScreen: Image sync check completed');
+    } catch (e) {
+      print('❌ ProfileScreen: Image sync check failed: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final userStream = ref.watch(userServiceProvider).watchCurrentUser();

@@ -135,7 +135,14 @@ class UserRepositoryImpl implements UserRepository {
         } else {
           // Existing user - use UPDATE with LWW strategy
           try {
-            if (remoteUser.isNewerThan(localUser)) {
+            // Special handling for profile images: don't override local changes
+            if (localUser.profilePath != null &&
+                localUser.profilePath!.startsWith('local://') &&
+                localUser.avatarVersion > remoteUser.avatarVersion) {
+              print(
+                  '⏭️ Skipped user ${remoteUser.userId} (has local profile image changes)');
+              skippedCount++;
+            } else if (remoteUser.isNewerThan(localUser)) {
               final syncedUser = remoteUser.copyWith(
                 isSynced: true,
                 needsSync: false,

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../data/datasources/local/local_user_database_service.dart';
 import '../../domain/services/image_sync_service.dart';
 
 class NetworkSyncService {
@@ -29,26 +30,36 @@ class NetworkSyncService {
 
   /// Sync all pending users (called by existing sync system)
   static Future<void> syncPendingUsers() async {
-    if (_pendingSyncUsers.isEmpty) {
-      print('ℹ️ No pending image users to sync');
-      return;
-    }
+    print('🔄 Starting image sync for all users...');
 
-    print(
-        '🔄 Syncing ${_pendingSyncUsers.length} pending image users: ${_pendingSyncUsers.toList()}');
+    try {
+      // Get all users from local database
+      final localUserService = LocalUserDatabaseService();
+      final allUsers = await localUserService.getAllUsers();
+      
+      print('�� Found ${allUsers.length} users in local database');
 
-    final usersToSync = List<String>.from(_pendingSyncUsers);
-
-    for (final userId in usersToSync) {
-      try {
-        print('🔄 Starting sync for user: $userId');
-        await ImageSyncService.syncWithRetry(userId);
-        removePendingSync(userId);
-        print('✅ Successfully synced user: $userId');
-      } catch (e) {
-        print('❌ Failed to sync user $userId: $e');
-        // Keep user in pending list for retry
+      for (final user in allUsers) {
+        try {
+          // Check if user needs sync
+          final needsSync = user.needsSync || 
+                          !user.isSynced || 
+                          (user.profilePath != null && user.profilePath!.startsWith('local://'));
+          
+          if (needsSync) {
+            print('�� User ${user.userId} needs sync: needsSync=${user.needsSync}, isSynced=${user.isSynced}, profilePath=${user.profilePath}');
+            await ImageSyncService.syncWithRetry(user.userId);
+            print('✅ Successfully synced user: ${user.userId}');
+          } else {
+            print('ℹ️ User ${user.userId} does not need sync');
+          }
+        } catch (e) {
+          print('❌ Failed to sync user ${user.userId}: $e');
+          // Keep user in pending list for retry
+        }
       }
+    } catch (e) {
+      print('❌ Failed to get users for sync: $e');
     }
   }
 
